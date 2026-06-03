@@ -501,14 +501,14 @@ select {
   display: grid;
   align-content: start;
   justify-items: center;
+  gap: 10px;
 }
 
 .battle-box {
   position: relative;
-  width: min(calc(100vw - 42px), 700px);
-  max-height: calc(100vh - 210px);
-  aspect-ratio: 620 / 520;
-  margin: 28px auto 0;
+  width: min(calc(100vw - 42px), calc(100vh - 214px), 700px);
+  aspect-ratio: 1;
+  margin: 18px auto 0;
   border: 8px solid #000;
   background: #000;
 }
@@ -695,6 +695,12 @@ canvas {
 
   .battle-screen {
     padding: 46px 12px 12px;
+    gap: 8px;
+  }
+
+  .battle-box {
+    width: min(calc(100vw - 24px), calc(100vh - 224px));
+    margin-top: 10px;
   }
 
   .select-screen {

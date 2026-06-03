@@ -16,10 +16,18 @@ import flytrapIdleAsset from "./assets/EAttack/Flytrap-Idle.png";
 import flytrapAttack1Asset from "./assets/EAttack/Flytrap-Attack1.png";
 import flytrapAttack2Asset from "./assets/EAttack/Flytrap-Attack2.png";
 import flytrapAttack3Asset from "./assets/EAttack/Flytrap-Attack3.png";
+import duringLiquidSfx from "./assets/ESFX/During-Liquid.mp3";
+import flytrapChompSfx from "./assets/ESFX/Flytrap-Chomp.mp3";
+import flytrapPlantSfx from "./assets/ESFX/Flytrap-Plant.mp3";
+import hitSfx from "./assets/ESFX/Hit.mp3";
 import honkSfx from "./assets/ESFX/Honk.mp3";
+import syringeSfx from "./assets/ESFX/Syringe.mp3";
+import toxicWinSfx from "./assets/ESFX/Toxic-Win.mp3";
 
 const randomCode = () =>
   Array.from({ length: 6 }, () => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[Math.floor(Math.random() * 32)]).join("");
+
+const ARENA_SIZE = 620;
 
 const fighters = [
   {
@@ -66,6 +74,18 @@ const fighters = [
     damage: 1,
     stats: { Overgrowth: "0 plants" },
     abilities: ["Overgrowth"]
+  },
+  {
+    id: "gravity",
+    name: "Air Ball",
+    short: "AIR",
+    hue: "#4f8cff",
+    accent: "#d9e7ff",
+    hp: 100,
+    weight: 1.15,
+    damage: 1,
+    stats: {},
+    abilities: ["Blue Mode"]
   }
 ];
 
@@ -279,6 +299,7 @@ function App() {
           <Battle
             fighters={choices}
             modifiers={modifiers}
+            settings={settings}
             mode={mode}
             back={() => setScreen("select")}
             exitHoldProgress={exitHoldProgress}
@@ -435,8 +456,15 @@ function ModifierDrawer({ open, close, modifiers, setModifiers }) {
   );
 }
 
-function Battle({ fighters: selected, modifiers, mode, back, exitHoldProgress }) {
+function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldProgress }) {
   const canvasRef = React.useRef(null);
+  const playSfx = React.useCallback((src, volumeScale = 1) => {
+    if (!settings.sfx) return;
+
+    const audio = new Audio(src);
+    audio.volume = Math.max(0, Math.min(1, (settings.volume / 100) * volumeScale));
+    audio.play().catch(() => {});
+  }, [settings.sfx, settings.volume]);
   const maxHp = React.useMemo(() => selected.map((fighter) => Math.round(fighter.hp * modifiers.health)), [selected, modifiers.health]);
   const [state, setState] = React.useState({
     hp: maxHp,
@@ -447,7 +475,10 @@ function Battle({ fighters: selected, modifiers, mode, back, exitHoldProgress })
       toxinStacks: 0,
       toxinDamageOutput: fighter.id === "poison" ? 0 : null,
       nextSyringe: fighter.id === "poison" ? 3 : null,
-      activePlants: fighter.id === "plant" ? 0 : null
+      activePlants: fighter.id === "plant" ? 0 : null,
+      plantChomps: fighter.id === "plant" ? 0 : null,
+      maxPlants: fighter.id === "plant" ? 5 : null,
+      nextBlueMode: fighter.id === "gravity" ? 5 : null
     })),
     floating: [],
     winner: null
@@ -466,6 +497,7 @@ function Battle({ fighters: selected, modifiers, mode, back, exitHoldProgress })
     const box = { w: canvas.width, h: canvas.height };
     const now = performance.now();
     const cooldown = modifiers.noCooldown ? 650 : 4500;
+    const blueModeCooldown = modifiers.noCooldown ? 900 : 5000;
     const makeImage = (src) => {
       const image = new Image();
       image.src = src;
@@ -488,9 +520,14 @@ function Battle({ fighters: selected, modifiers, mode, back, exitHoldProgress })
         toxinStacks: 0,
         toxinDamageOutput: fighter.id === "poison" ? 0 : null,
         nextSyringe: fighter.id === "poison" ? 3 : null,
-        activePlants: fighter.id === "plant" ? 0 : null
+        activePlants: fighter.id === "plant" ? 0 : null,
+        plantChomps: fighter.id === "plant" ? 0 : null,
+        maxPlants: fighter.id === "plant" ? 5 : null,
+        nextBlueMode: fighter.id === "gravity" ? 5 : null
       })),
       nextSyringeAt: selected.map((fighter) => (fighter.id === "poison" ? now + cooldown : Infinity)),
+      nextBlueModeAt: selected.map((fighter) => (fighter.id === "gravity" ? now + blueModeCooldown : Infinity)),
+      blueModeArrows: [],
       projectiles: [],
       traps: [],
       explosions: [],
@@ -504,24 +541,41 @@ function Battle({ fighters: selected, modifiers, mode, back, exitHoldProgress })
       lastToxinTickAt: now,
       lastHudAt: 0
     };
-    const balls = selected.map((fighter, index) => ({
-      fighter,
-      side: index,
-      x: index ? box.w - 130 : 130,
-      y: index ? box.h - 105 : 105,
-      vx: (index ? -4.3 : 4.3) * modifiers.speed,
-      vy: (index ? -3.4 : 3.4) * modifiers.speed,
-      baseVx: (index ? -4.3 : 4.3) * modifiers.speed,
-      baseVy: (index ? -3.4 : 3.4) * modifiers.speed,
-      r: 38,
-      powered: false,
-      poweredUntil: 0,
-      lastPoweredWallAt: 0,
-      trappedBy: null,
-      hurtUntil: 0
-    }));
     const normalSpeed = 5.4 * modifiers.speed;
     const powerSpeed = 15.5 * modifiers.speed;
+    const trapSpitSpeed = powerSpeed * 0.92;
+    const ballRadius = Math.round(box.w * 0.075);
+    const startX = box.w * 0.22;
+    const startY = box.h * 0.32;
+    const launchDx = box.w * 0.56;
+    const launchDy = box.h * 0.36;
+    const launchUnitX = launchDx / Math.hypot(launchDx, launchDy);
+    const launchUnitY = launchDy / Math.hypot(launchDx, launchDy);
+    const balls = selected.map((fighter, index) => {
+      const direction = index ? -1 : 1;
+      const vx = direction * launchUnitX * normalSpeed;
+      const vy = direction * launchUnitY * normalSpeed;
+
+      return {
+        fighter,
+        side: index,
+        x: index ? box.w - startX : startX,
+        y: index ? box.h - startY : startY,
+        vx,
+        vy,
+        baseVx: vx,
+        baseVy: vy,
+        r: ballRadius,
+        powered: false,
+        poweredUntil: 0,
+        lastPoweredWallAt: 0,
+        trapPowerWindowUntil: 0,
+        trapSpitUntil: 0,
+        trappedBy: null,
+        slam: null,
+        hurtUntil: 0
+      };
+    });
     const setVelocity = (ball, angle, speed) => {
       ball.vx = Math.cos(angle) * speed;
       ball.vy = Math.sin(angle) * speed;
@@ -543,6 +597,7 @@ function Battle({ fighters: selected, modifiers, mode, back, exitHoldProgress })
       const angle = Math.atan2(ball.vy, ball.vx);
       ball.powered = true;
       ball.poweredUntil = time + 3000;
+      ball.trapSpitUntil = 0;
       setVelocity(ball, angle, powerSpeed);
     };
     const markPowerAtAngle = (ball, time, angle) => {
@@ -552,6 +607,7 @@ function Battle({ fighters: selected, modifiers, mode, back, exitHoldProgress })
       }
       ball.powered = true;
       ball.poweredUntil = time + 3000;
+      ball.trapSpitUntil = 0;
       setVelocity(ball, angle, powerSpeed);
     };
     const randomPoweredWallAngle = (wall) => {
@@ -581,6 +637,33 @@ function Battle({ fighters: selected, modifiers, mode, back, exitHoldProgress })
       const extraTransparency = Math.max(0, transparency - 30);
       return Math.max(0.1, 3 - Math.floor(extraTransparency / 5) * 0.5);
     };
+    const getPlantMax = (chomps) => 5 + Math.floor(chomps / 5);
+    const getWallDistance = (ball, angle) => {
+      const dx = Math.cos(angle);
+      const dy = Math.sin(angle);
+      const distances = [];
+
+      if (dx > 0) distances.push((box.w - ball.r - ball.x) / dx);
+      if (dx < 0) distances.push((ball.r - ball.x) / dx);
+      if (dy > 0) distances.push((box.h - ball.r - ball.y) / dy);
+      if (dy < 0) distances.push((ball.r - ball.y) / dy);
+
+      return Math.max(0, Math.min(...distances.filter((distance) => distance >= 0)));
+    };
+    const getBlueModeTravelSpan = (ball, angle) => {
+      const dx = Math.abs(Math.cos(angle));
+      const dy = Math.abs(Math.sin(angle));
+      const distances = [];
+
+      if (dx > 0.001) distances.push((box.w - ball.r * 2) / dx);
+      if (dy > 0.001) distances.push((box.h - ball.r * 2) / dy);
+
+      return Math.max(1, Math.min(...distances));
+    };
+    const getBlueModeDamage = (travelDistance, travelSpan) => {
+      const ratio = Math.max(0, Math.min(1, travelDistance / travelSpan));
+      return Math.max(1, Math.round(1 - 3 * ratio + 22 * ratio * ratio));
+    };
     const aimAtMovingTarget = (source, target, projectileSpeed, leadMultiplier = 1) => {
       const dx = target.x - source.x;
       const dy = target.y - source.y;
@@ -598,10 +681,13 @@ function Battle({ fighters: selected, modifiers, mode, back, exitHoldProgress })
       }
       return Math.atan2(target.y + target.vy * t * leadMultiplier - source.y, target.x + target.vx * t * leadMultiplier - source.x);
     };
-    const chooseSyringeAim = (source, target, projectileSpeed) => {
+    const chooseSyringeAim = (source, target, projectileSpeed, targetHpPercent) => {
+      const missingHpPercent = 1 - Math.max(0, Math.min(1, targetHpPercent));
+      const accurateChance = 0.4 + missingHpPercent * 0.4;
+      const directChance = 0.4 - missingHpPercent * 0.4;
       const roll = Math.random();
-      if (roll < 0.4) return aimAtMovingTarget(source, target, projectileSpeed);
-      if (roll < 0.8) return Math.atan2(target.y - source.y, target.x - source.x);
+      if (roll < accurateChance) return aimAtMovingTarget(source, target, projectileSpeed);
+      if (roll < accurateChance + directChance) return Math.atan2(target.y - source.y, target.x - source.x);
       return aimAtMovingTarget(source, target, projectileSpeed, 1.7);
     };
     const addExplosion = (x, y, hue = "#f24f28", size = 1) => {
@@ -612,6 +698,8 @@ function Battle({ fighters: selected, modifiers, mode, back, exitHoldProgress })
       if (game.defeatedSide !== null) return;
       game.defeatedSide = side;
       game.winner = side ? 0 : 1;
+      if (selected[game.winner].id === "poison") playSfx(toxicWinSfx);
+
       const defeatedBall = balls[side];
       addExplosion(defeatedBall.x, defeatedBall.y, defeatedBall.fighter.hue, 1.8);
       game.projectiles
@@ -629,6 +717,7 @@ function Battle({ fighters: selected, modifiers, mode, back, exitHoldProgress })
       if (game.defeatedSide !== null || game.hp[side] <= 0) return;
       if (game.effects[side].liquidState === "Water") return;
       game.hp[side] = Math.max(0, game.hp[side] - amount);
+      playSfx(hitSfx, 0.5);
       balls[side].hurtUntil = performance.now() + 167;
       game.floating.push({ id: `${performance.now()}-${side}`, side, x, y, text: `-${amount}` });
       game.floating = game.floating.slice(-8);
@@ -639,12 +728,25 @@ function Battle({ fighters: selected, modifiers, mode, back, exitHoldProgress })
       const existing = game.traps.some((trap) => Math.hypot(trap.x - x, trap.y - y) < 68);
       if (existing) return;
       const activeSideTraps = game.traps.filter((trap) => trap.side === side);
-      if (activeSideTraps.length >= 5) return;
-      game.traps.push({ id: `${performance.now()}-${side}-${game.traps.length}`, side, x, y, angle, closed: false, victimSide: null, releaseAt: 0 });
+      const maxPlants = game.effects[side].maxPlants ?? 5;
+      if (activeSideTraps.length >= maxPlants) return;
+      game.traps.push({ id: `${performance.now()}-${side}-${game.traps.length}`, side, x, y, angle, closed: false, victimSide: null, releaseAt: 0, powerRelease: false });
+      playSfx(flytrapPlantSfx);
       if (game.effects[side].activePlants !== null) game.effects[side].activePlants = activeSideTraps.length + 1;
     };
     const harshKnock = (ball, angle) => {
-      setVelocity(ball, angle, powerSpeed * 0.92);
+      setVelocity(ball, angle, trapSpitSpeed);
+    };
+    const finishSlamIntoWall = (ball) => {
+      if (!ball.slam) return;
+
+      const travelDistance = Math.hypot(ball.x - ball.slam.startX, ball.y - ball.slam.startY);
+      const damage = getBlueModeDamage(travelDistance, ball.slam.travelSpan);
+      const reboundAngle = Math.atan2(-ball.vy, -ball.vx);
+      ball.slam = null;
+      restoreBaseVelocity(ball);
+      pushDamage(ball.side, damage, ball.x, ball.y);
+      if (damage > 10 && game.hp[ball.side] > 0) markPowerAtAngle(ball, performance.now(), reboundAngle);
     };
     const bounceBalls = (a, b, time) => {
       const dx = b.x - a.x;
@@ -772,6 +874,33 @@ function Battle({ fighters: selected, modifiers, mode, back, exitHoldProgress })
       }
       ctx.restore();
     };
+    const drawBlueModeArrow = (arrow, time) => {
+      const spinProgress = Math.max(0, Math.min(1, (time - arrow.startedAt) / 1000));
+      const angle = arrow.angle + spinProgress * Math.PI * 2;
+      const size = Math.min(box.w, box.h) * 0.7;
+      const shaftWidth = size * 0.22;
+
+      ctx.save();
+      ctx.translate(box.w / 2, box.h / 2);
+      ctx.rotate(angle);
+      ctx.globalAlpha = 0.42;
+      ctx.fillStyle = "#8e959f";
+      ctx.strokeStyle = "#333840";
+      ctx.lineWidth = Math.max(5, size * 0.035);
+      ctx.beginPath();
+      ctx.moveTo(size / 2, 0);
+      ctx.lineTo(size * 0.14, -size * 0.3);
+      ctx.lineTo(size * 0.14, -shaftWidth / 2);
+      ctx.lineTo(-size / 2, -shaftWidth / 2);
+      ctx.lineTo(-size / 2, shaftWidth / 2);
+      ctx.lineTo(size * 0.14, shaftWidth / 2);
+      ctx.lineTo(size * 0.14, size * 0.3);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    };
     let lastTime = now;
     let raf;
     const draw = (time) => {
@@ -784,11 +913,16 @@ function Battle({ fighters: selected, modifiers, mode, back, exitHoldProgress })
       ctx.strokeStyle = "#111";
       ctx.lineWidth = 5;
       ctx.strokeRect(2, 2, box.w - 4, box.h - 4);
+      game.blueModeArrows.forEach((arrow) => drawBlueModeArrow(arrow, time));
 
       if (!state.countdown) {
         balls.forEach((ball) => {
           if (game.hp[ball.side] <= 0) return;
           if (ball.powered && time >= ball.poweredUntil) endPower(ball);
+          if (!ball.powered && ball.trapSpitUntil && time >= ball.trapSpitUntil) {
+            setVelocity(ball, Math.atan2(ball.vy, ball.vx), normalSpeed);
+            ball.trapSpitUntil = 0;
+          }
           if (ball.inLiquid && game.effects[ball.side].liquidState !== "Water") {
             restoreBaseVelocity(ball);
             ball.inLiquid = false;
@@ -807,7 +941,9 @@ function Battle({ fighters: selected, modifiers, mode, back, exitHoldProgress })
 
           if (ball.x < ball.r) {
             ball.x = ball.r;
-            if (ball.powered) {
+            if (ball.slam) {
+              finishSlamIntoWall(ball);
+            } else if (ball.powered) {
               if (time - ball.lastPoweredWallAt > 150) {
                 pushDamage(ball.side, 1, ball.x, ball.y);
                 ball.lastPoweredWallAt = time;
@@ -820,7 +956,9 @@ function Battle({ fighters: selected, modifiers, mode, back, exitHoldProgress })
           }
           if (ball.x > box.w - ball.r) {
             ball.x = box.w - ball.r;
-            if (ball.powered) {
+            if (ball.slam) {
+              finishSlamIntoWall(ball);
+            } else if (ball.powered) {
               if (time - ball.lastPoweredWallAt > 150) {
                 pushDamage(ball.side, 1, ball.x, ball.y);
                 ball.lastPoweredWallAt = time;
@@ -833,7 +971,9 @@ function Battle({ fighters: selected, modifiers, mode, back, exitHoldProgress })
           }
           if (ball.y < ball.r) {
             ball.y = ball.r;
-            if (ball.powered) {
+            if (ball.slam) {
+              finishSlamIntoWall(ball);
+            } else if (ball.powered) {
               if (time - ball.lastPoweredWallAt > 150) {
                 pushDamage(ball.side, 1, ball.x, ball.y);
                 ball.lastPoweredWallAt = time;
@@ -846,7 +986,9 @@ function Battle({ fighters: selected, modifiers, mode, back, exitHoldProgress })
           }
           if (ball.y > box.h - ball.r) {
             ball.y = box.h - ball.r;
-            if (ball.powered) {
+            if (ball.slam) {
+              finishSlamIntoWall(ball);
+            } else if (ball.powered) {
               if (time - ball.lastPoweredWallAt > 150) {
                 pushDamage(ball.side, 1, ball.x, ball.y);
                 ball.lastPoweredWallAt = time;
@@ -870,8 +1012,10 @@ function Battle({ fighters: selected, modifiers, mode, back, exitHoldProgress })
           const waterSide = balls.find((ball) => ball.fighter.id === "water")?.side;
           if (waterSide !== undefined) {
             const otherSide = waterSide ? 0 : 1;
+            const liquidStarted = !game.liquidContact;
             game.liquidContact = { waterSide, otherSide };
             game.effects[waterSide].liquidState = "Water";
+            if (liquidStarted) playSfx(duringLiquidSfx);
             game.effects[waterSide].transparency = Math.min(92, game.effects[waterSide].transparency + 0.12);
             if (!balls[otherSide].inLiquid) {
               balls[otherSide].baseVx = balls[otherSide].vx;
@@ -909,7 +1053,9 @@ function Battle({ fighters: selected, modifiers, mode, back, exitHoldProgress })
               const target = balls[index ? 0 : 1];
               const source = balls[index];
               const syringeSpeed = 12.5;
-              const angle = chooseSyringeAim(source, target, syringeSpeed);
+              const targetHpPercent = game.hp[target.side] / maxHp[target.side];
+              const angle = chooseSyringeAim(source, target, syringeSpeed, targetHpPercent);
+              playSfx(syringeSfx);
               game.projectiles.push({
                 side: index,
                 target: index ? 0 : 1,
@@ -924,7 +1070,41 @@ function Battle({ fighters: selected, modifiers, mode, back, exitHoldProgress })
               game.nextSyringeAt[index] = time + cooldown;
             }
           }
+          if (fighter.id === "gravity" && game.hp[index] > 0 && game.defeatedSide === null) {
+            game.effects[index].nextBlueMode = Math.max(0, (game.nextBlueModeAt[index] - time) / 1000);
+            if (time >= game.nextBlueModeAt[index]) {
+              game.blueModeArrows.push({
+                id: `${time}-${index}`,
+                side: index,
+                target: index ? 0 : 1,
+                angle: Math.random() * Math.PI * 2,
+                startedAt: time,
+                slammed: false
+              });
+              game.nextBlueModeAt[index] = time + blueModeCooldown;
+            }
+          }
         });
+
+        game.blueModeArrows.forEach((arrow) => {
+          const target = balls[arrow.target];
+          if (arrow.slammed || time - arrow.startedAt < 1000) return;
+          if (game.hp[arrow.side] <= 0 || game.hp[arrow.target] <= 0 || game.defeatedSide !== null) return;
+
+          const angle = arrow.angle + Math.PI * 2;
+          const slamSpeed = 18 * modifiers.speed;
+          target.trappedBy = null;
+          target.powered = false;
+          target.slam = {
+            startX: target.x,
+            startY: target.y,
+            travelSpan: getBlueModeTravelSpan(target, angle)
+          };
+          target.vx = Math.cos(angle) * slamSpeed;
+          target.vy = Math.sin(angle) * slamSpeed;
+          arrow.slammed = true;
+        });
+        game.blueModeArrows = game.blueModeArrows.filter((arrow) => time - arrow.startedAt < 1200);
 
         game.projectiles = game.projectiles.filter((projectile) => {
           projectile.x += projectile.vx;
@@ -973,7 +1153,15 @@ function Battle({ fighters: selected, modifiers, mode, back, exitHoldProgress })
               victim.vy = 0;
               if (time >= trap.releaseAt) {
                 victim.trappedBy = null;
-                markPowerAtAngle(victim, time, trap.angle);
+                if (trap.powerRelease) {
+                  markPowerAtAngle(victim, time, trap.angle);
+                } else {
+                  victim.powered = false;
+                  victim.poweredUntil = 0;
+                  setVelocity(victim, trap.angle, trapSpitSpeed);
+                  victim.trapPowerWindowUntil = time + 1000;
+                  victim.trapSpitUntil = time + 1000;
+                }
                 trap.closedAt = time;
                 trap.victimSide = null;
               }
@@ -981,17 +1169,25 @@ function Battle({ fighters: selected, modifiers, mode, back, exitHoldProgress })
             return;
           }
           const enemy = balls[trap.side ? 0 : 1];
-          const centerHitboxRadius = 12;
+          const centerHitboxRadius = 12 * 1.1;
           if (game.defeatedSide === null && game.hp[trap.side] > 0 && game.hp[enemy.side] > 0 && Math.hypot(trap.x - enemy.x, trap.y - enemy.y) < enemy.r + centerHitboxRadius) {
             trap.closed = true;
+            playSfx(flytrapChompSfx);
+            if (game.effects[trap.side].plantChomps !== null) {
+              game.effects[trap.side].plantChomps += 1;
+              game.effects[trap.side].maxPlants = getPlantMax(game.effects[trap.side].plantChomps);
+            }
             trap.victimSide = enemy.side;
+            trap.powerRelease = enemy.trapPowerWindowUntil >= time;
             trap.releaseAt = time + 240;
             enemy.trappedBy = trap.id;
+            enemy.trapPowerWindowUntil = 0;
+            enemy.trapSpitUntil = 0;
             enemy.x = trap.x;
             enemy.y = trap.y;
             enemy.vx = 0;
             enemy.vy = 0;
-            pushDamage(enemy.side, 3, enemy.x, enemy.y);
+            pushDamage(enemy.side, 5, enemy.x, enemy.y);
           }
         });
         game.traps = game.traps.filter((trap) => !trap.closedAt || time - trap.closedAt < 420);
@@ -1022,16 +1218,16 @@ function Battle({ fighters: selected, modifiers, mode, back, exitHoldProgress })
     };
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [selected, modifiers, state.countdown, maxHp]);
+  }, [selected, modifiers, state.countdown, maxHp, playSfx]);
 
   return (
     <section className="battle-screen">
       <CornerBack onBack={back} holdProgress={exitHoldProgress} />
       <div className="battle-box">
-        <canvas ref={canvasRef} width="620" height="520" />
+        <canvas ref={canvasRef} width={ARENA_SIZE} height={ARENA_SIZE} />
         {state.countdown > 0 && <div className="countdown">{state.countdown}</div>}
         {state.floating.map((hit) => (
-          <span key={hit.id} className="damage-pop" style={{ left: `${(hit.x / 620) * 100}%`, top: `${(hit.y / 520) * 100}%` }}>{hit.text}</span>
+          <span key={hit.id} className="damage-pop" style={{ left: `${(hit.x / ARENA_SIZE) * 100}%`, top: `${(hit.y / ARENA_SIZE) * 100}%` }}>{hit.text}</span>
         ))}
         {Number.isInteger(state.winner) && <div className="win-banner">{selected[state.winner].name} Wins!</div>}
       </div>
@@ -1061,12 +1257,16 @@ function EffectPanel({ fighter, effects, side, mode }) {
     lines.push(`DMG per sec: ${effects.toxinDamageOutput}`);
   }
   if (fighter.id === "plant") {
-    lines.push(`Plants: ${effects.activePlants}/5`);
+    lines.push(`Plants: ${effects.activePlants}/${effects.maxPlants}`);
+    lines.push(`Chomps Until Upgrade: ${effects.plantChomps % 5}/5`);
+  }
+  if (fighter.id === "gravity") {
+    lines.push(`Next blue mode: ${effects.nextBlueMode.toFixed(1)} sec`);
   }
   return (
     <div className="effect-panel">
       {mode !== "local" && <strong>{side}</strong>}
-      <span>{fighter.abilities.join(" + ")}</span>
+      <span>Abilities: {fighter.abilities.join(" + ")}</span>
       {lines.map((line) => <small key={line}>{line}</small>)}
     </div>
   );
