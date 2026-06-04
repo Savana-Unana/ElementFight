@@ -635,7 +635,7 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
     };
     const getLiquidCooldownFrames = (transparency) => {
       const extraTransparency = Math.max(0, transparency - 30);
-      return Math.max(0.1, 3 - Math.floor(extraTransparency / 5) * 0.5);
+      return Math.max(1.5, 3 - Math.floor(extraTransparency / 5) * 0.5);
     };
     const getPlantMax = (chomps) => 5 + Math.floor(chomps / 5);
     const getWallDistance = (ball, angle) => {
@@ -746,7 +746,7 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
       ball.slam = null;
       restoreBaseVelocity(ball);
       pushDamage(ball.side, damage, ball.x, ball.y);
-      if (damage > 10 && game.hp[ball.side] > 0) markPowerAtAngle(ball, performance.now(), reboundAngle);
+      if (damage >= 15 && game.hp[ball.side] > 0) markPowerAtAngle(ball, performance.now(), reboundAngle);
     };
     const bounceBalls = (a, b, time) => {
       const dx = b.x - a.x;
@@ -1245,7 +1245,7 @@ function EffectPanel({ fighter, effects, side, mode }) {
   const lines = [];
   const getLiquidCooldownFrames = (transparency) => {
     const extraTransparency = Math.max(0, transparency - 30);
-    return Math.max(0.1, 3 - Math.floor(extraTransparency / 5) * 0.5);
+    return Math.max(1.5, 3 - Math.floor(extraTransparency / 5) * 0.5);
   };
   if (fighter.id === "water") {
     lines.push(`State: ${effects.liquidState}`);
