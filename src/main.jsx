@@ -662,7 +662,7 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
     };
     const getBlueModeDamage = (travelDistance, travelSpan) => {
       const ratio = Math.max(0, Math.min(1, travelDistance / travelSpan));
-      return Math.max(1, Math.round(1 - 3 * ratio + 22 * ratio * ratio));
+      return Math.max(5, Math.round(5 - 5 * ratio + 30 * ratio * ratio));
     };
     const aimAtMovingTarget = (source, target, projectileSpeed, leadMultiplier = 1) => {
       const dx = target.x - source.x;
