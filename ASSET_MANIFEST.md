@@ -31,8 +31,12 @@ Future Codex: check this file before asking what assets exist or what still need
 - `During-Liquid.mp3`
 - `Flytrap-Chomp.mp3`
 - `Flytrap-Plant.mp3`
+- `Frost-Shatter.mp3`
 - `Hit.mp3`
+- `Icicle-Throw.mp3`
 - `Syringe.mp3`
+- `Tesla-Place.mp3`
+- `Tesla-Zap.mp3`
 - `Toxic-Win.mp3`
 
 ### Empty Or Not Yet Provided
@@ -58,8 +62,9 @@ Future Codex: check this file before asking what assets exist or what still need
 - Gravity normal/hurt skins
 
 ### `src/assets/EAttack`
-- Fire explosion image or sprite
-- Ice trail patch
+- Fire Overload charge/dash sprite or effect
+- Fire flame patch sprite
+- Icicle image or sprite
 - Tesla coil idle sprite
 - Tesla coil zapping sprite
 - Lightning bolt sprite
@@ -88,11 +93,10 @@ Future Codex: check this file before asking what assets exist or what still need
 - Power hit
 - Stun hit
 - Ball explosion
-- Fire explosion
-- Ice rush start
-- Ice freeze/stun
-- Tesla coil build
-- Lightning zap
+- Fire Overload charge
+- Fire Overload dash
+- Fire flame patch burn
+- Ice slow/defrost loop
 - Gravity moon hit
 - Gravity moon crush
 - Baseball swing
@@ -118,5 +122,16 @@ Future Codex: check this file before asking what assets exist or what still need
 - Syringes use `EAttack/Syringe.png`.
 - Life flytraps use `Flytrap-Idle.png` and attack frames.
 - Baseball bat uses `EAttack/Basebat.png`.
-- Fire explosions, Ice trails, Tesla coils/lightning, and Gravity moons are currently code-drawn.
+- Fire Overload charge/dash, Fire flame patches, icicles, Tesla coils/lightning, and Gravity moons are currently code-drawn.
+- Sharp Shoot uses `ESFX/Icicle-Throw.mp3`.
+- Defrost contact shatter uses `ESFX/Frost-Shatter.mp3`.
+- Electric coil placement and zaps use `ESFX/Tesla-Place.mp3` and `ESFX/Tesla-Zap.mp3`.
 - Duck button uses `ESFX/Honk.mp3`; no duck image exists yet.
+
+## Current Ability Notes For Asset Planning
+
+- Fire now uses `Overload`: damage taken fills a `5` damage info counter, then Fire charges for 2 seconds before dashing at the opponent. Extra damage during the charge/dash increases the attack bonus. During the dash, Fire leaves small temporary flame patches that each deal 2 damage per second while overlapped until Fire hits or the dash ends.
+- Ice uses `Slippery` and `Sharp Shoot`: icicles fire every 2 seconds, start slow, speed up while traveling, predict movement-focused abilities, deal 3 on hit, apply Defrost for 2 seconds, and track `Icicle's Landed` for frost-contact damage.
+- Poison/Toxic uses `Anti-Virus` on the opponent info box: fresh ball overlaps add progress, Water overlaps count only once per overlap, the first cleanse requires 5 contacts, and each cleanse raises the next requirement by 5 while reducing toxic damage by 1.
+- Gravity `Moon Lock` displays separate `Moon #1` and `Moon #2` states. Moons are code-drawn, orbit, launch after a full rotation, collide while orbiting, and return after launch.
+- Air keeps `Blue Mode`, but its info panel no longer shows the damage range line.

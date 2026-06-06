@@ -21,9 +21,13 @@ import baseballBatAsset from "./assets/EAttack/Basebat.png";
 import duringLiquidSfx from "./assets/ESFX/During-Liquid.mp3";
 import flytrapChompSfx from "./assets/ESFX/Flytrap-Chomp.mp3";
 import flytrapPlantSfx from "./assets/ESFX/Flytrap-Plant.mp3";
+import frostShatterSfx from "./assets/ESFX/Frost-Shatter.mp3";
 import hitSfx from "./assets/ESFX/Hit.mp3";
 import honkSfx from "./assets/ESFX/Honk.mp3";
+import icicleThrowSfx from "./assets/ESFX/Icicle-Throw.mp3";
 import syringeSfx from "./assets/ESFX/Syringe.mp3";
+import teslaPlaceSfx from "./assets/ESFX/Tesla-Place.mp3";
+import teslaZapSfx from "./assets/ESFX/Tesla-Zap.mp3";
 import toxicWinSfx from "./assets/ESFX/Toxic-Win.mp3";
 
 const randomCode = () =>
@@ -87,7 +91,7 @@ const fighters = [
     weight: 1.05,
     damage: 1,
     stats: {},
-    abilities: ["Explosion"]
+    abilities: ["Overload"]
   },
   {
     id: "ice",
@@ -99,7 +103,7 @@ const fighters = [
     weight: 1.08,
     damage: 1,
     stats: {},
-    abilities: ["Frost Rush"]
+    abilities: ["Slippery", "Sharp Shoot"]
   },
   {
     id: "electric",
@@ -547,17 +551,25 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
       liquidState: fighter.id === "water" ? "Solid" : null,
       transparency: fighter.id === "water" ? 30 : null,
       toxinStacks: 0,
+      antiVirusContacts: 0,
+      antiVirusRequired: 5,
       toxinDamageOutput: fighter.id === "poison" ? 0 : null,
       nextSyringe: fighter.id === "poison" ? 3 : null,
       activePlants: fighter.id === "life" ? 0 : null,
       plantChomps: fighter.id === "life" ? 0 : null,
       maxPlants: fighter.id === "life" ? 5 : null,
       nextBlueMode: fighter.id === "air" ? 5 : null,
-      nextIceRush: fighter.id === "ice" ? 10 : null,
-      iceState: fighter.id === "ice" ? "Waiting" : null,
+      nextIcicle: fighter.id === "ice" ? 2 : null,
+      iciclesLanded: fighter.id === "ice" ? 0 : null,
+      overloadDamage: fighter.id === "fire" ? 0 : null,
+      overloadRequired: fighter.id === "fire" ? 5 : null,
+      overloadState: fighter.id === "fire" ? "Building" : null,
+      overloadBonus: fighter.id === "fire" ? 0 : null,
+      defrostTime: 0,
       teslaCoils: fighter.id === "electric" ? 0 : null,
       lightningState: fighter.id === "electric" ? "Idle" : null,
       moonMode: fighter.id === "gravity" ? "Orbiting" : null,
+      moonStates: fighter.id === "gravity" ? ["Orbiting", "Orbiting"] : null,
       nextSwing: fighter.id === "baseball" ? 3 : null,
       swingState: fighter.id === "baseball" ? "Waiting" : null,
       strikes: fighter.id === "baseball" ? 0 : null,
@@ -580,7 +592,7 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
     const box = { w: canvas.width, h: canvas.height };
     const now = performance.now();
     const cooldown = modifiers.noCooldown ? 650 : 4500;
-    const blueModeCooldown = modifiers.noCooldown ? 900 : 5000;
+    const blueModeCooldown = 5000;
     const baseballCooldown = modifiers.noCooldown ? 900 : 3000;
     const baseballHold = modifiers.noCooldown ? 650 : 2000;
     const makeImage = (src) => {
@@ -604,17 +616,25 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
         liquidState: fighter.id === "water" ? "Solid" : null,
         transparency: fighter.id === "water" ? 30 : null,
         toxinStacks: 0,
+        antiVirusContacts: 0,
+        antiVirusRequired: 5,
         toxinDamageOutput: fighter.id === "poison" ? 0 : null,
         nextSyringe: fighter.id === "poison" ? 3 : null,
         activePlants: fighter.id === "life" ? 0 : null,
         plantChomps: fighter.id === "life" ? 0 : null,
         maxPlants: fighter.id === "life" ? 5 : null,
         nextBlueMode: fighter.id === "air" ? 5 : null,
-        nextIceRush: fighter.id === "ice" ? 10 : null,
-        iceState: fighter.id === "ice" ? "Waiting" : null,
+        nextIcicle: fighter.id === "ice" ? 2 : null,
+        iciclesLanded: fighter.id === "ice" ? 0 : null,
+        overloadDamage: fighter.id === "fire" ? 0 : null,
+        overloadRequired: fighter.id === "fire" ? 5 : null,
+        overloadState: fighter.id === "fire" ? "Building" : null,
+        overloadBonus: fighter.id === "fire" ? 0 : null,
+        defrostTime: 0,
         teslaCoils: fighter.id === "electric" ? 0 : null,
         lightningState: fighter.id === "electric" ? "Idle" : null,
         moonMode: fighter.id === "gravity" ? "Orbiting" : null,
+        moonStates: fighter.id === "gravity" ? ["Orbiting", "Orbiting"] : null,
         nextSwing: fighter.id === "baseball" ? baseballCooldown / 1000 : null,
         swingState: fighter.id === "baseball" ? "Waiting" : null,
         strikes: fighter.id === "baseball" ? 0 : null,
@@ -622,11 +642,11 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
       })),
       nextSyringeAt: selected.map((fighter) => (fighter.id === "poison" ? now + cooldown : Infinity)),
       nextBlueModeAt: selected.map((fighter) => (fighter.id === "air" ? now + blueModeCooldown : Infinity)),
-      nextIceRushAt: selected.map((fighter) => (fighter.id === "ice" ? now + 10000 : Infinity)),
+      nextIcicleAt: selected.map((fighter) => (fighter.id === "ice" ? now + 2000 : Infinity)),
       nextBaseballSwingAt: selected.map((fighter) => (fighter.id === "baseball" ? now + baseballCooldown : Infinity)),
       blueModeArrows: [],
       elementalExplosions: [],
-      iceTrails: [],
+      fireFlames: [],
       teslaCoils: [],
       lightningBolts: [],
       lightningQueue: [],
@@ -641,6 +661,7 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
       lastCollisionAt: 0,
       liquidDamageAccumulator: 0,
       liquidContact: null,
+      touchingLastFrame: false,
       lastToxinTickAt: now,
       nextLightningAt: Infinity,
       lastHudAt: 0
@@ -681,11 +702,16 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
         trappedBy: null,
         slam: null,
         swing: null,
-        iceRushUntil: 0,
-        nextIceTurnAt: 0,
-        lastIceTrailAt: 0,
-        iceTrailTouch: 0,
-        iceSlowUntil: 0,
+        overloadState: "building",
+        overloadChargeAt: 0,
+        overloadDashStartedAt: 0,
+        overloadBonus: 0,
+        overloadHit: false,
+        overloadSpeed: 0,
+        lastFireFlameAt: 0,
+        lastImpactAt: now,
+        defrostUntil: 0,
+        defrostOwnerSide: null,
         moons: fighter.id === "gravity" ? [0, 1].map((moonIndex) => ({
           state: "orbit",
           x: 0,
@@ -713,10 +739,53 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
       ball.x = Math.max(ball.r, Math.min(box.w - ball.r, ball.x));
       ball.y = Math.max(ball.r, Math.min(box.h - ball.r, ball.y));
     };
+    const markImpact = (ball, time) => {
+      ball.lastImpactAt = time;
+    };
     const isAbilityPaused = (ball, time = performance.now()) => ball.powered || ball.slam || time < ball.stunnedUntil;
+    const getIcePhysicsSpeed = (ball, time) => {
+      const charge = Math.max(0, Math.min(1, (time - ball.lastImpactAt) / 6000));
+      return normalSpeed * (0.68 + charge * 0.92);
+    };
+    const getPredictedVelocity = (ball, time) => {
+      if (game.hp[ball.side] <= 0 || ball.trappedBy || time < ball.stunnedUntil) return { vx: 0, vy: 0 };
+
+      const speed = Math.hypot(ball.vx, ball.vy);
+      if (speed < 0.001) return { vx: 0, vy: 0 };
+      if (ball.inLiquid || (ball.swing && !isAbilityPaused(ball, time))) return { vx: ball.vx, vy: ball.vy };
+
+      const targetSpeed = ball.slam
+        ? slamSpeed
+        : ball.powered
+          ? powerSpeed
+          : time < ball.trapSpitUntil
+            ? trapSpitSpeed
+            : ball.overloadState === "dashing"
+              ? ball.overloadSpeed
+              : time < ball.defrostUntil
+                ? normalSpeed * 0.45
+                : ball.fighter.id === "ice"
+                  ? getIcePhysicsSpeed(ball, time)
+                  : normalSpeed;
+
+      return {
+        vx: (ball.vx / speed) * targetSpeed,
+        vy: (ball.vy / speed) * targetSpeed
+      };
+    };
     const keepBallSpeed = (ball, time) => {
       if (game.hp[ball.side] <= 0 || ball.trappedBy || time < ball.stunnedUntil || (ball.swing && !isAbilityPaused(ball, time))) return;
-      const targetSpeed = ball.slam ? slamSpeed : ball.powered ? powerSpeed : time < ball.iceSlowUntil ? normalSpeed * 0.42 : normalSpeed;
+      const targetSpeed = ball.slam
+        ? slamSpeed
+          : ball.powered
+            ? powerSpeed
+            : ball.overloadState === "dashing"
+              ? ball.overloadSpeed
+              : time < ball.defrostUntil
+                ? normalSpeed * 0.45
+                : ball.fighter.id === "ice"
+                  ? getIcePhysicsSpeed(ball, time)
+                  : normalSpeed;
       const speed = Math.hypot(ball.vx, ball.vy);
       if (speed < 0.001) {
         setVelocity(ball, Math.random() * Math.PI * 2, targetSpeed);
@@ -773,7 +842,7 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
     };
     const nudgeDirection = (moving) => {
       const speed = Math.hypot(moving.vx, moving.vy) || 1;
-      const angle = Math.atan2(moving.vy, moving.vx) + (Math.random() - 0.5) * 0.55;
+      const angle = Math.atan2(moving.vy, moving.vx) + (Math.random() - 0.5) * 1.15;
       moving.vx = Math.cos(angle) * speed;
       moving.vy = Math.sin(angle) * speed;
       if ("baseVx" in moving) {
@@ -816,13 +885,12 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
     };
     const getBlueModeDamage = (travelDistance, travelSpan) => {
       const ratio = Math.max(0, Math.min(1, travelDistance / travelSpan));
-      return Math.max(3, Math.round(3 - 3 * ratio + 20 * ratio * ratio));
+      return Math.max(3, Math.round(3 - 3 * ratio + 15 * ratio * ratio));
     };
-    const aimAtMovingTarget = (source, target, projectileSpeed, leadMultiplier = 1) => {
+    const aimAtMovingTarget = (source, target, projectileSpeed, leadMultiplier = 1, time = performance.now()) => {
       const dx = target.x - source.x;
       const dy = target.y - source.y;
-      const dvx = target.vx;
-      const dvy = target.vy;
+      const { vx: dvx, vy: dvy } = getPredictedVelocity(target, time);
       const a = dvx * dvx + dvy * dvy - projectileSpeed * projectileSpeed;
       const b = 2 * (dx * dvx + dy * dvy);
       const c = dx * dx + dy * dy;
@@ -833,16 +901,16 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
         const rootB = (-b + Math.sqrt(discriminant)) / (2 * a);
         t = [rootA, rootB].filter((value) => value > 0).sort((left, right) => left - right)[0] || t;
       }
-      return Math.atan2(target.y + target.vy * t * leadMultiplier - source.y, target.x + target.vx * t * leadMultiplier - source.x);
+      return Math.atan2(target.y + dvy * t * leadMultiplier - source.y, target.x + dvx * t * leadMultiplier - source.x);
     };
-    const chooseSyringeAim = (source, target, projectileSpeed, targetHpPercent) => {
+    const chooseSyringeAim = (source, target, projectileSpeed, targetHpPercent, time) => {
       const missingHpPercent = 1 - Math.max(0, Math.min(1, targetHpPercent));
-      const accurateChance = 0.4 + missingHpPercent * 0.4;
-      const directChance = 0.4 - missingHpPercent * 0.4;
+      const accurateChance = 0.35 + missingHpPercent * 0.4;
+      const directChance = Math.max(0, 0.35 - missingHpPercent * 0.35);
       const roll = Math.random();
-      if (roll < accurateChance) return aimAtMovingTarget(source, target, projectileSpeed);
+      if (roll < accurateChance) return aimAtMovingTarget(source, target, projectileSpeed, 1, time);
       if (roll < accurateChance + directChance) return Math.atan2(target.y - source.y, target.x - source.x);
-      return aimAtMovingTarget(source, target, projectileSpeed, 1.7);
+      return aimAtMovingTarget(source, target, projectileSpeed, 1.7, time);
     };
     const addExplosion = (x, y, hue = "#f24f28", size = 1) => {
       game.explosions.push({ id: `${performance.now()}-${x}-${y}`, x, y, hue, size, bornAt: performance.now() });
@@ -867,14 +935,39 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
       game.nextSyringeAt[side] = Infinity;
       game.effects[side].nextSyringe = game.effects[side].nextSyringe === null ? null : 0;
     };
+    const addFireOverloadDamage = (ball, lostHp, time) => {
+      if (ball.fighter.id !== "fire" || lostHp <= 0 || game.hp[ball.side] <= 0) return;
+      const effect = game.effects[ball.side];
+
+      if (ball.overloadState === "building") {
+        effect.overloadDamage += lostHp;
+        if (effect.overloadDamage >= effect.overloadRequired) {
+          const overdamage = effect.overloadDamage - effect.overloadRequired;
+          effect.overloadDamage = effect.overloadRequired;
+          effect.overloadBonus = overdamage;
+          ball.overloadState = "charging";
+          ball.overloadChargeAt = time + 2000;
+          ball.overloadBonus = overdamage;
+          ball.overloadHit = false;
+          effect.overloadState = "Charging";
+        }
+        return;
+      }
+
+      ball.overloadBonus += lostHp;
+      effect.overloadBonus = ball.overloadBonus;
+    };
     const pushDamage = (side, amount, x, y) => {
       if (game.defeatedSide !== null || game.hp[side] <= 0) return;
       if (game.effects[side].liquidState === "Water") return;
+      const previousHp = game.hp[side];
       game.hp[side] = Math.max(0, game.hp[side] - amount);
+      const lostHp = previousHp - game.hp[side];
       playSfx(hitSfx, 0.5);
       balls[side].hurtUntil = performance.now() + 167;
       game.floating.push({ id: `${performance.now()}-${side}`, side, x, y, text: `-${amount}` });
       game.floating = game.floating.slice(-8);
+      addFireOverloadDamage(balls[side], lostHp, performance.now());
       if (game.hp[side] <= 0) defeatSide(side, performance.now());
     };
     const distanceToSegment = (px, py, ax, ay, bx, by) => {
@@ -884,57 +977,40 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
       const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lengthSq));
       return Math.hypot(px - (ax + dx * t), py - (ay + dy * t));
     };
-    const triggerFireExplosion = (ball, time) => {
-      const enemy = balls[ball.side ? 0 : 1];
-      const radius = ball.r * 5.2;
-      game.elementalExplosions.push({ id: `${time}-${ball.side}-fire`, x: ball.x, y: ball.y, hue: "#f97316", bornAt: time, radius });
-      game.elementalExplosions = game.elementalExplosions.slice(-16);
-      const distance = Math.hypot(enemy.x - ball.x, enemy.y - ball.y);
-      if (game.hp[enemy.side] > 0 && distance <= radius) {
-        const ratio = 1 - Math.max(0, Math.min(1, distance / radius));
-        pushDamage(enemy.side, Math.round(3 + ratio * 7), enemy.x, enemy.y);
-      }
-    };
     const addTeslaCoil = (ball, x, y, time) => {
       if (game.teslaCoils.some((coil) => coil.side === ball.side && Math.hypot(coil.x - x, coil.y - y) < ball.r * 1.4)) return;
       game.teslaCoils.push({ id: `${time}-${ball.side}-${game.teslaCoils.length}`, side: ball.side, x, y });
+      playSfx(teslaPlaceSfx, 0.7);
       if (game.teslaCoils.filter((coil) => coil.side === ball.side).length === 2) {
         game.nextLightningAt = Math.min(game.nextLightningAt, time + 5000);
       }
     };
-    const startIceRush = (ball, time) => {
-      ball.iceRushUntil = time + 5000;
-      ball.nextIceTurnAt = time;
-      ball.lastIceTrailAt = 0;
-    };
-    const updateIceRush = (ball, time) => {
-      if (time >= ball.iceRushUntil) return;
-      if (time >= ball.nextIceTurnAt) {
-        setVelocity(ball, Math.random() * Math.PI * 2, normalSpeed * 2.5);
-        ball.nextIceTurnAt = time + 500;
-      }
-      if (time - ball.lastIceTrailAt > 90) {
-        game.iceTrails.push({ id: `${time}-${ball.side}`, side: ball.side, x: ball.x, y: ball.y, bornAt: time });
-        game.iceTrails = game.iceTrails.slice(-80);
-        ball.lastIceTrailAt = time;
-      }
-    };
-    const updateIceTrailContact = (time, dt) => {
-      game.iceTrails = game.iceTrails.filter((trail) => time - trail.bornAt < 7000);
-      balls.forEach((ball) => {
-        const onEnemyIce = game.iceTrails.some((trail) => trail.side !== ball.side && Math.hypot(ball.x - trail.x, ball.y - trail.y) < ball.r * 1.35);
-        if (!onEnemyIce || game.hp[ball.side] <= 0) {
-          ball.iceTrailTouch = 0;
-          return;
-        }
-        ball.iceSlowUntil = time + 120;
-        ball.iceTrailTouch += dt;
-        if (ball.iceTrailTouch >= 3000) {
-          pushDamage(ball.side, 10, ball.x, ball.y);
-          if (game.hp[ball.side] > 0) stunBall(ball, time);
-          ball.iceTrailTouch = 0;
-        }
+    const shootIcicle = (ball, time) => {
+      const target = balls[ball.side ? 0 : 1];
+      const startSpeed = 2.4;
+      const topSpeed = 7.4;
+      const rampMs = 2200;
+      const aimSpeed = (startSpeed + topSpeed) / 2;
+      const angle = aimAtMovingTarget(ball, target, aimSpeed, 1, time);
+      playSfx(icicleThrowSfx, 0.75);
+      game.projectiles.push({
+        type: "icicle",
+        side: ball.side,
+        target: ball.side ? 0 : 1,
+        x: ball.x,
+        y: ball.y,
+        vx: Math.cos(angle) * startSpeed,
+        vy: Math.sin(angle) * startSpeed,
+        baseVx: Math.cos(angle) * startSpeed,
+        baseVy: Math.sin(angle) * startSpeed,
+        angle,
+        bornAt: time,
+        startSpeed,
+        topSpeed,
+        rampMs,
+        inLiquid: false
       });
+      game.nextIcicleAt[ball.side] = time + 2000;
     };
     const shuffle = (items) => {
       const shuffled = [...items];
@@ -953,7 +1029,7 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
       });
       return pairs;
     };
-    const getTeslaZapDelay = (pairCount) => Math.max(80, Math.min(500, 4500 / Math.max(1, pairCount)));
+    const getTeslaZapDelay = (pairCount) => Math.max(220, Math.min(650, 650 / Math.sqrt(Math.max(1, pairCount))));
     const updateLightning = (time) => {
       const pairs = getTeslaPairs();
       if (time >= game.nextLightningAt && pairs.length > 0 && game.lightningQueue.length === 0) {
@@ -964,6 +1040,7 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
       if (game.lightningQueue.length > 0 && time >= game.nextLightningZapAt) {
         const pair = game.lightningQueue.shift();
         game.lightningBolts.push({ id: `${time}-${pair.a.id}-${pair.b.id}`, side: pair.side, a: pair.a, b: pair.b, bornAt: time, hitSides: [] });
+        playSfx(teslaZapSfx, 0.07);
         game.nextLightningZapAt = time + getTeslaZapDelay(pairs.length);
         if (game.lightningQueue.length === 0) game.nextLightningZapAt = Infinity;
       }
@@ -1093,6 +1170,7 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
         collideMoonWithEnemy(moon, moon.x, moon.y, 3, true);
       });
       game.effects[ball.side].moonMode = ball.moons.some((moon) => moon.state === "launched") ? "Launched" : "Orbiting";
+      game.effects[ball.side].moonStates = ball.moons.map((moon) => moon.state === "launched" ? "Launched" : "Orbiting");
     };
     const startBlueMode = (ball, time) => {
       game.blueModeArrows.push({
@@ -1245,9 +1323,11 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
       ball.slam = null;
       restoreBaseVelocity(ball);
       pushDamage(ball.side, damage, ball.x, ball.y);
-      if (damage >= 15 && game.hp[ball.side] > 0) markPowerAtAngle(ball, performance.now(), reboundAngle);
+      if (damage >= 12 && game.hp[ball.side] > 0) markPowerAtAngle(ball, performance.now(), reboundAngle);
     };
     const bounceBalls = (a, b, time) => {
+      markImpact(a, time);
+      markImpact(b, time);
       const dx = b.x - a.x;
       const dy = b.y - a.y;
       const dist = Math.hypot(dx, dy) || 1;
@@ -1282,6 +1362,21 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
         markPower(b, time);
       }
     };
+    const triggerDefrostContact = (time) => {
+      balls.forEach((ball) => {
+        if (time >= ball.defrostUntil || game.hp[ball.side] <= 0) return;
+        const owner = Number.isInteger(ball.defrostOwnerSide) ? balls[ball.defrostOwnerSide] : null;
+        if (owner && isAbilityPaused(owner, time)) return;
+        const other = balls[ball.side ? 0 : 1];
+        const angle = Math.atan2(ball.y - other.y, ball.x - other.x);
+        const frostDamage = owner ? Math.max(1, game.effects[owner.side].iciclesLanded ?? 1) : 1;
+        pushDamage(ball.side, frostDamage, ball.x, ball.y);
+        playSfx(frostShatterSfx, 0.85);
+        if (game.hp[ball.side] > 0) markPowerAtAngle(ball, time, angle);
+        ball.defrostUntil = 0;
+        ball.defrostOwnerSide = null;
+      });
+    };
     const drawBall = (ball) => {
       const effect = game.effects[ball.side];
       ctx.globalAlpha = effect.transparency !== null ? Math.max(0.18, 1 - effect.transparency / 100) : 1;
@@ -1306,6 +1401,15 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
         ctx.beginPath();
         ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
         ctx.fill();
+      }
+      if (performance.now() < ball.defrostUntil) {
+        ctx.save();
+        ctx.globalAlpha = 0.28;
+        ctx.fillStyle = "#82f4ff";
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
       }
       ctx.globalAlpha = 1;
       ctx.fillStyle = "#111";
@@ -1381,7 +1485,19 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
       ctx.save();
       ctx.translate(projectile.x, projectile.y);
       ctx.rotate(Math.atan2(projectile.vy, projectile.vx) + Math.PI / 2);
-      if (syringeImage.complete && syringeImage.naturalWidth) {
+      if (projectile.type === "icicle") {
+        ctx.fillStyle = "#dff9ff";
+        ctx.strokeStyle = "#69d8ff";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, -18);
+        ctx.lineTo(9, 10);
+        ctx.lineTo(0, 17);
+        ctx.lineTo(-9, 10);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      } else if (syringeImage.complete && syringeImage.naturalWidth) {
         const height = 34;
         const width = height * (syringeImage.naturalWidth / syringeImage.naturalHeight);
         ctx.drawImage(syringeImage, -width / 2, -height / 2, width, height);
@@ -1429,17 +1545,22 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
       ctx.restore();
     };
     const drawElementalEffects = (time) => {
-      game.iceTrails.forEach((trail) => {
-        const age = Math.max(0, Math.min(1, (time - trail.bornAt) / 7000));
+      game.fireFlames = game.fireFlames.filter((flame) => time - flame.bornAt < 2800);
+      game.fireFlames.forEach((flame) => {
+        const age = Math.max(0, Math.min(1, (time - flame.bornAt) / 2800));
         ctx.save();
-        ctx.globalAlpha = 0.42 * (1 - age);
-        ctx.fillStyle = "#9eefff";
-        ctx.strokeStyle = "#defbff";
+        ctx.globalAlpha = 0.62 * (1 - age * 0.75);
+        ctx.fillStyle = "#fb923c";
+        ctx.strokeStyle = "#ef4444";
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(trail.x, trail.y, ballRadius * 0.82, 0, Math.PI * 2);
+        ctx.arc(flame.x, flame.y, flame.r * (1 - age * 0.25), 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
+        ctx.fillStyle = "#fde68a";
+        ctx.beginPath();
+        ctx.arc(flame.x, flame.y, flame.r * 0.45 * (1 - age * 0.2), 0, Math.PI * 2);
+        ctx.fill();
         ctx.restore();
       });
 
@@ -1555,12 +1676,48 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
             keepInBox(ball);
             return;
           }
+          if (ball.fighter.id === "fire" && ball.overloadState === "charging") {
+            game.effects[ball.side].overloadState = "Charging";
+            game.effects[ball.side].overloadBonus = ball.overloadBonus;
+            ball.vx *= 0.18;
+            ball.vy *= 0.18;
+            if (time >= ball.overloadChargeAt) {
+              const target = balls[ball.side ? 0 : 1];
+              const angle = Math.atan2(target.y - ball.y, target.x - ball.x);
+              ball.overloadState = "dashing";
+              ball.overloadDashStartedAt = time;
+              ball.overloadSpeed = powerSpeed * 1.05;
+              ball.overloadHit = false;
+              game.effects[ball.side].overloadState = "Dashing";
+              setVelocity(ball, angle, ball.overloadSpeed);
+            }
+          }
+          if (ball.fighter.id === "fire" && ball.overloadState === "dashing") {
+            const target = balls[ball.side ? 0 : 1];
+            const angle = Math.atan2(target.y - ball.y, target.x - ball.x);
+            ball.vx = Math.cos(angle) * ball.overloadSpeed;
+            ball.vy = Math.sin(angle) * ball.overloadSpeed;
+            if (!ball.overloadHit && time - ball.lastFireFlameAt > 85) {
+              game.fireFlames.push({
+                id: `${time}-${ball.side}-${game.fireFlames.length}`,
+                side: ball.side,
+                x: ball.x,
+                y: ball.y,
+                r: ball.r * 0.46,
+                bornAt: time,
+                lastHitAt: 0
+              });
+              game.fireFlames = game.fireFlames.slice(-70);
+              ball.lastFireFlameAt = time;
+            }
+          }
           ball.vy += modifiers.gravity ? 0.045 : 0;
           ball.x += ball.vx;
           ball.y += ball.vy;
 
           if (ball.x < ball.r) {
             ball.x = ball.r;
+            markImpact(ball, time);
             if (ball.slam) {
               finishSlamIntoWall(ball);
             } else if (ball.powered) {
@@ -1573,11 +1730,11 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
               ball.vx = Math.abs(ball.vx);
             }
             if (ball.fighter.id === "life" && !isAbilityPaused(ball, time)) spawnTrap(ball.side, 8, ball.y, 0);
-            if (ball.fighter.id === "fire") triggerFireExplosion(ball, time);
             if (ball.fighter.id === "electric") addTeslaCoil(ball, 8, ball.y, time);
           }
           if (ball.x > box.w - ball.r) {
             ball.x = box.w - ball.r;
+            markImpact(ball, time);
             if (ball.slam) {
               finishSlamIntoWall(ball);
             } else if (ball.powered) {
@@ -1590,11 +1747,11 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
               ball.vx = -Math.abs(ball.vx);
             }
             if (ball.fighter.id === "life" && !isAbilityPaused(ball, time)) spawnTrap(ball.side, box.w - 8, ball.y, Math.PI);
-            if (ball.fighter.id === "fire") triggerFireExplosion(ball, time);
             if (ball.fighter.id === "electric") addTeslaCoil(ball, box.w - 8, ball.y, time);
           }
           if (ball.y < ball.r) {
             ball.y = ball.r;
+            markImpact(ball, time);
             if (ball.slam) {
               finishSlamIntoWall(ball);
             } else if (ball.powered) {
@@ -1607,11 +1764,11 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
               ball.vy = Math.abs(ball.vy);
             }
             if (ball.fighter.id === "life" && !isAbilityPaused(ball, time)) spawnTrap(ball.side, ball.x, 8, Math.PI / 2);
-            if (ball.fighter.id === "fire") triggerFireExplosion(ball, time);
             if (ball.fighter.id === "electric") addTeslaCoil(ball, ball.x, 8, time);
           }
           if (ball.y > box.h - ball.r) {
             ball.y = box.h - ball.r;
+            markImpact(ball, time);
             if (ball.slam) {
               finishSlamIntoWall(ball);
             } else if (ball.powered) {
@@ -1624,7 +1781,6 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
               ball.vy = -Math.abs(ball.vy);
             }
             if (ball.fighter.id === "life" && !isAbilityPaused(ball, time)) spawnTrap(ball.side, ball.x, box.h - 8, -Math.PI / 2);
-            if (ball.fighter.id === "fire") triggerFireExplosion(ball, time);
             if (ball.fighter.id === "electric") addTeslaCoil(ball, ball.x, box.h - 8, time);
           }
         });
@@ -1636,9 +1792,48 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
         game.effects.forEach((effect) => {
           if (effect.liquidState !== null) effect.liquidState = "Solid";
         });
+        const freshTouch = touching && !game.touchingLastFrame;
         if (touching && game.defeatedSide === null) {
+          balls.forEach((ball) => markImpact(ball, time));
+          triggerDefrostContact(time);
           const waterSide = balls.find((ball) => ball.fighter.id === "water")?.side;
           const pausedContact = balls.some((ball) => isAbilityPaused(ball, time));
+          if (freshTouch) {
+            game.effects.forEach((effect) => {
+              if (effect.toxinStacks <= 0) return;
+              effect.antiVirusContacts += 1;
+              if (effect.antiVirusContacts >= effect.antiVirusRequired) {
+                effect.antiVirusContacts = 0;
+                effect.antiVirusRequired += 5;
+                effect.toxinStacks = Math.max(0, effect.toxinStacks - 1);
+                const poisonEffect = game.effects.find((candidate) => candidate.toxinDamageOutput !== null);
+                if (poisonEffect) poisonEffect.toxinDamageOutput = Math.max(0, poisonEffect.toxinDamageOutput - 1);
+              }
+            });
+          }
+          balls.forEach((ball) => {
+            if (ball.fighter.id !== "fire" || ball.overloadState !== "dashing" || ball.overloadHit) return;
+            const enemy = balls[ball.side ? 0 : 1];
+            const delaySeconds = Math.max(0, (time - ball.overloadDashStartedAt) / 1000);
+            const attackBonus = Math.max(0, ball.overloadBonus * 0.65 - delaySeconds * 0.9);
+            const damage = Math.max(1, Math.round(4 + attackBonus));
+            const angle = Math.atan2(enemy.y - ball.y, enemy.x - ball.x);
+            pushDamage(enemy.side, damage, enemy.x, enemy.y);
+            if (game.hp[enemy.side] > 0) {
+              const shoveSpeed = Math.min(powerSpeed, normalSpeed * (1.45 + attackBonus * 0.12));
+              enemy.vx = Math.cos(angle) * shoveSpeed;
+              enemy.vy = Math.sin(angle) * shoveSpeed;
+            }
+            ball.overloadState = "building";
+            ball.overloadHit = true;
+            ball.overloadBonus = 0;
+            ball.overloadSpeed = 0;
+            ball.lastFireFlameAt = 0;
+            game.fireFlames = game.fireFlames.filter((flame) => flame.side !== ball.side);
+            game.effects[ball.side].overloadDamage = 0;
+            game.effects[ball.side].overloadBonus = 0;
+            game.effects[ball.side].overloadState = "Building";
+          });
           if (waterSide !== undefined) {
             const otherSide = waterSide ? 0 : 1;
             const liquidStarted = !game.liquidContact;
@@ -1678,6 +1873,7 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
           game.liquidDamageAccumulator = 0;
           game.liquidContact = null;
         }
+        game.touchingLastFrame = touching;
 
         selected.forEach((fighter, index) => {
           const ball = balls[index];
@@ -1694,9 +1890,10 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
               const source = balls[index];
               const syringeSpeed = 12.5;
               const targetHpPercent = game.hp[target.side] / maxHp[target.side];
-              const angle = chooseSyringeAim(source, target, syringeSpeed, targetHpPercent);
+              const angle = chooseSyringeAim(source, target, syringeSpeed, targetHpPercent, time);
               playSfx(syringeSfx);
               game.projectiles.push({
+                type: "syringe",
                 side: index,
                 target: index ? 0 : 1,
                 x: source.x,
@@ -1712,17 +1909,12 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
           }
           if (fighter.id === "ice" && game.hp[index] > 0 && game.defeatedSide === null) {
             if (paused) {
-              game.nextIceRushAt[index] += dt;
-              game.effects[index].nextIceRush = Math.max(0, (game.nextIceRushAt[index] - time) / 1000);
+              game.nextIcicleAt[index] += dt;
+              game.effects[index].nextIcicle = Math.max(0, (game.nextIcicleAt[index] - time) / 1000);
               return;
             }
-            if (time >= game.nextIceRushAt[index] && time >= ball.iceRushUntil) {
-              startIceRush(ball, time);
-              game.nextIceRushAt[index] = time + 10000;
-            }
-            updateIceRush(ball, time);
-            game.effects[index].nextIceRush = Math.max(0, (game.nextIceRushAt[index] - time) / 1000);
-            game.effects[index].iceState = time < ball.iceRushUntil ? "Rushing" : "Waiting";
+            game.effects[index].nextIcicle = Math.max(0, (game.nextIcicleAt[index] - time) / 1000);
+            if (time >= game.nextIcicleAt[index]) shootIcicle(ball, time);
           }
           if (fighter.id === "air" && game.hp[index] > 0 && game.defeatedSide === null) {
             if (paused) {
@@ -1771,6 +1963,11 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
           }
         });
 
+        balls.forEach((ball) => {
+          game.effects[ball.side].defrostTime = Math.max(0, (ball.defrostUntil - time) / 1000);
+          if (game.effects[ball.side].defrostTime <= 0) ball.defrostOwnerSide = null;
+        });
+
         game.blueModeArrows.forEach((arrow) => {
           const target = balls[arrow.target];
           if (arrow.slammed || time - arrow.startedAt < 1000) return;
@@ -1794,10 +1991,21 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
         });
         game.blueModeArrows = game.blueModeArrows.filter((arrow) => time - arrow.startedAt < 1200);
 
-        updateIceTrailContact(time, dt);
         updateLightning(time);
 
         game.projectiles = game.projectiles.filter((projectile) => {
+          const owner = balls[projectile.side];
+          const defrostProjectileMultiplier = time < owner.defrostUntil ? 0.45 : 1;
+          if (projectile.type === "icicle") {
+            const ramp = Math.max(0, Math.min(1, (time - projectile.bornAt) / projectile.rampMs));
+            const speed = projectile.startSpeed + (projectile.topSpeed - projectile.startSpeed) * ramp * ramp;
+            projectile.baseVx = Math.cos(projectile.angle) * speed;
+            projectile.baseVy = Math.sin(projectile.angle) * speed;
+          }
+          if (!projectile.inLiquid) {
+            projectile.vx = projectile.baseVx * defrostProjectileMultiplier;
+            projectile.vy = projectile.baseVy * defrostProjectileMultiplier;
+          }
           projectile.x += projectile.vx;
           projectile.y += projectile.vy;
           const target = balls[projectile.target];
@@ -1807,24 +2015,55 @@ function Battle({ fighters: selected, modifiers, settings, mode, back, exitHoldP
             if (!projectile.inLiquid) {
               projectile.inLiquid = true;
             }
-            projectile.vx = projectile.baseVx * 0.8;
-            projectile.vy = projectile.baseVy * 0.8;
+            projectile.vx = projectile.baseVx * 0.8 * defrostProjectileMultiplier;
+            projectile.vy = projectile.baseVy * 0.8 * defrostProjectileMultiplier;
             return projectile.x > -30 && projectile.x < box.w + 30 && projectile.y > -30 && projectile.y < box.h + 30;
           }
           if (projectile.inLiquid) {
             nudgeDirection(projectile);
             projectile.baseVx = projectile.vx;
             projectile.baseVy = projectile.vy;
+            if (projectile.type === "icicle") projectile.angle = Math.atan2(projectile.baseVy, projectile.baseVx);
             projectile.inLiquid = false;
           }
           if (Math.hypot(projectile.x - target.x, projectile.y - target.y) < target.r + 8) {
-            game.effects[projectile.target].toxinStacks = (game.effects[projectile.target].toxinStacks || 0) + 1;
-            if (game.effects[projectile.side].toxinDamageOutput !== null) {
-              game.effects[projectile.side].toxinDamageOutput += 1;
+            if (projectile.type === "icicle") {
+              pushDamage(projectile.target, 3, target.x, target.y);
+              if (game.effects[projectile.side].iciclesLanded !== null) {
+                game.effects[projectile.side].iciclesLanded += 1;
+              }
+              target.defrostUntil = time + 2000;
+              target.defrostOwnerSide = projectile.side;
+            } else {
+              game.effects[projectile.target].toxinStacks = (game.effects[projectile.target].toxinStacks || 0) + 1;
+              if (game.effects[projectile.side].toxinDamageOutput !== null) {
+                game.effects[projectile.side].toxinDamageOutput += 1;
+              }
             }
             return false;
           }
           return projectile.x > -30 && projectile.x < box.w + 30 && projectile.y > -30 && projectile.y < box.h + 30;
+        });
+
+        game.fireFlames.forEach((flame) => {
+          const target = balls[flame.side ? 0 : 1];
+          if (game.hp[target.side] <= 0 || time - flame.lastHitAt < 1000) return;
+          if (Math.hypot(target.x - flame.x, target.y - flame.y) < target.r + flame.r) {
+            pushDamage(target.side, 2, target.x, target.y);
+            flame.lastHitAt = time;
+          }
+        });
+
+        balls.forEach((ball) => {
+          if (ball.fighter.id !== "fire" || ball.overloadState !== "dashing") return;
+          if (time - ball.overloadDashStartedAt < 5500) return;
+          ball.overloadState = "building";
+          ball.overloadBonus = 0;
+          ball.overloadSpeed = 0;
+          game.fireFlames = game.fireFlames.filter((flame) => flame.side !== ball.side);
+          game.effects[ball.side].overloadDamage = 0;
+          game.effects[ball.side].overloadBonus = 0;
+          game.effects[ball.side].overloadState = "Building";
         });
 
         if (game.defeatedSide === null && time - game.lastToxinTickAt >= 1000) {
@@ -1946,17 +2185,30 @@ function EffectPanel({ fighter, effects, side, mode }) {
     lines.push(`Transparency: ${Math.round(effects.transparency)}%`);
     lines.push(`DMG cooldown: ${getLiquidCooldownFrames(effects.transparency).toFixed(1)} frames`);
   }
+  if (fighter.id === "fire") {
+    lines.push(`Overload: ${effects.overloadDamage}/${effects.overloadRequired}`);
+    lines.push(`State: ${effects.overloadState}`);
+    lines.push(`Attack bonus: +${effects.overloadBonus.toFixed(1)}`);
+  }
   if (fighter.id === "poison") {
     lines.push(`Next syringe: ${effects.nextSyringe.toFixed(1)} sec`);
-    lines.push(`DMG per sec: ${effects.toxinDamageOutput}`);
+  }
+  if (effects.toxinStacks > 0) {
+    lines.push(`Toxic: ${effects.toxinStacks} dmg/sec`);
+  }
+  if (effects.toxinStacks > 0 || effects.antiVirusContacts > 0) {
+    lines.push(`Anti-Virus: ${effects.antiVirusContacts}/${effects.antiVirusRequired}`);
+  }
+  if (effects.defrostTime > 0) {
+    lines.push(`Defrosting: ${effects.defrostTime.toFixed(1)} sec`);
   }
   if (fighter.id === "life") {
     lines.push(`Growths: ${effects.activePlants}/${effects.maxPlants}`);
     lines.push(`Chomps Until Upgrade: ${effects.plantChomps % 5}/5`);
   }
   if (fighter.id === "ice") {
-    lines.push(`State: ${effects.iceState}`);
-    lines.push(`Next rush: ${effects.nextIceRush.toFixed(1)} sec`);
+    lines.push(`Next icicle: ${effects.nextIcicle.toFixed(1)} sec`);
+    lines.push(`Icicle's Landed: ${effects.iciclesLanded}`);
   }
   if (fighter.id === "electric") {
     lines.push(`Tesla coils: ${effects.teslaCoils}`);
@@ -1964,10 +2216,10 @@ function EffectPanel({ fighter, effects, side, mode }) {
   }
   if (fighter.id === "air") {
     lines.push(`Next Blue Mode: ${effects.nextBlueMode.toFixed(1)} sec`);
-    lines.push("Damage: 3-20");
   }
   if (fighter.id === "gravity") {
-    lines.push(`Moons: ${effects.moonMode}`);
+    lines.push(`Moon #1: ${effects.moonStates?.[0] ?? effects.moonMode}`);
+    lines.push(`Moon #2: ${effects.moonStates?.[1] ?? effects.moonMode}`);
   }
   if (fighter.id === "baseball") {
     lines.push(`Strikes: ${effects.strikes}/3`);
