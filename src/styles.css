@@ -306,6 +306,13 @@ button {
   background: #31b65b;
 }
 
+.corner img {
+  width: 74%;
+  height: 74%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
 .hold-bar {
   position: absolute;
   left: 8px;
@@ -437,23 +444,23 @@ button {
 
 .preview-accessory.water {
   left: -7%;
-  top: 8%;
+  top: 6%;
   width: 114%;
-  height: 43%;
+  height: 47%;
 }
 
 .preview-accessory.electric {
-  left: -28%;
-  top: -66%;
-  width: 156%;
-  height: 83%;
+  left: -22.5%;
+  top: -27.5%;
+  width: 145%;
+  height: 77.5%;
 }
 
 .preview-accessory.baseball {
-  left: -5%;
-  top: -44%;
+  left: -6%;
+  top: -64%;
   width: 112%;
-  height: 64%;
+  height: 112%;
 }
 
 dl {
