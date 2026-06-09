@@ -56,6 +56,11 @@ import ghostWinSfx from "./assets/ESFX/Ghost-Win.mp3";
 import fireChargeSfx from "./assets/ESFX/Fire-Charge.mp3";
 import fireLaunchSfx from "./assets/ESFX/Fire-Launch.mp3";
 import lifeWinSfx from "./assets/ESFX/Life-Win.mp3";
+import luckEarnSfx from "./assets/ESFX/Luck-Earn.mp3";
+import luckGambleSfx from "./assets/ESFX/Luck-Gamble.mp3";
+import luckNothingSfx from "./assets/ESFX/Luck-Nothing.mp3";
+import luckWinSfx from "./assets/ESFX/Luck-Win.mp3";
+import luckXSfx from "./assets/ESFX/Luck-X.mp3";
 import baseballChargeSfx from "./assets/ESFX/Baseball-Charge.mp3";
 import baseballSwingSfx from "./assets/ESFX/Baseball-Swing.mp3";
 import baseballHitSfx from "./assets/ESFX/Baseball-Hit.mp3";
@@ -71,6 +76,17 @@ const randomCode = () =>
 
 const ARENA_SIZE = 620;
 const GENESIS_COOLDOWN_MS = 2000;
+const ROCKSLIDE_COOLDOWN_MS = 5000;
+const LUCK_SPIN_INTERVAL_MS = 2000;
+const LUCK_SPIN_DURATION_MS = 1000;
+const LUCK_NOTHING_SFX_MS = 500;
+const LUCK_SLOTS = ["glove", "bottle", "arrows", "x"];
+const LUCK_SLOT_LABELS = {
+  glove: "GLV",
+  bottle: "BTL",
+  arrows: "ARR",
+  x: "X"
+};
 
 const fighters = [
   {
@@ -155,6 +171,18 @@ const fighters = [
     abilities: ["Tesla Web"]
   },
   {
+    id: "earth",
+    name: "Earth Ball",
+    short: "RCK",
+    hue: "#8b5e34",
+    accent: "#d6b27b",
+    hp: 100,
+    weight: 1.25,
+    damage: 1,
+    stats: {},
+    abilities: ["Rockslide"]
+  },
+  {
     id: "air",
     name: "Air Ball",
     short: "AIR",
@@ -216,6 +244,18 @@ const fighters = [
     damage: 1,
     stats: {},
     abilities: ["Spooky"]
+  },
+  {
+    id: "luck",
+    name: "Luck Ball",
+    short: "LCK",
+    hue: "#f59e0b",
+    accent: "#fff7ad",
+    hp: 100,
+    weight: 1,
+    damage: 1,
+    stats: {},
+    abilities: ["Roll or Die"]
   }
 ];
 
@@ -240,6 +280,7 @@ const winSfxByFighter = {
   gravity: gravityWinSfx,
   ice: iceWinSfx,
   life: lifeWinSfx,
+  luck: luckWinSfx,
   poison: toxicWinSfx,
   water: waterWinSfx
 };
@@ -560,6 +601,17 @@ function CharacterSelect({ mode, choices, chooseFighter, setScreen, modifiers, s
   const nextPlayer = mode === "online" ? "Player 1" : `Player ${Math.min(choices.length + 1, 2)}`;
   const ready = choices.length === 2;
   const roster = [...fighters, randomFighter];
+  const scrollRoster = (event) => {
+    const scrollAmounts = {
+      ArrowUp: -96,
+      ArrowDown: 96,
+      ArrowLeft: -48,
+      ArrowRight: 48
+    };
+    if (!Object.hasOwn(scrollAmounts, event.key)) return;
+    event.preventDefault();
+    event.currentTarget.scrollBy({ top: scrollAmounts[event.key], behavior: "smooth" });
+  };
   return (
     <section className="select-screen">
       <CornerBack holdProgress={exitHoldProgress} onBack={() => (choices.length ? choices.length && window.dispatchEvent(new KeyboardEvent("keydown", { key: "Backspace" })) : setScreen("intro"))} />
@@ -582,7 +634,7 @@ function CharacterSelect({ mode, choices, chooseFighter, setScreen, modifiers, s
       <h2>{ready ? "Ready?" : `Select Your Character ${nextPlayer}`}</h2>
       <div className="versus-layout">
         <FighterPedestal label="Player 1" fighter={choices[0]} side="left" />
-        <div className="roster">
+        <div className="roster" tabIndex={0} onKeyDown={scrollRoster} aria-label="Ball selection">
           {roster.map((fighter) => (
             <button
               key={fighter.id}
@@ -757,6 +809,8 @@ function Battle({ fighters: selected, modifiers, settings, mode, recordGames, on
       defrostTime: 0,
       teslaCoils: fighter.id === "electric" ? 0 : null,
       lightningState: fighter.id === "electric" ? "Idle" : null,
+      nextRockslide: fighter.id === "earth" ? ROCKSLIDE_COOLDOWN_MS / 1000 : null,
+      activeRocks: fighter.id === "earth" ? 0 : null,
       moonMode: fighter.id === "gravity" ? "Orbiting" : null,
       moonStates: fighter.id === "gravity" ? ["Orbiting", "Orbiting"] : null,
       nextSwing: fighter.id === "baseball" ? 3 : null,
@@ -767,6 +821,11 @@ function Battle({ fighters: selected, modifiers, settings, mode, recordGames, on
       genesisObjects: fighter.id === "digital" ? 0 : null,
       spookyState: fighter.id === "fear" ? "Normal" : null,
       nextSpooky: fighter.id === "fear" ? 5 : null,
+      luckSlots: fighter.id === "luck" ? ["x", "x", "x"] : null,
+      luckState: fighter.id === "luck" ? "Waiting" : null,
+      nextLuckRoll: fighter.id === "luck" ? LUCK_SPIN_INTERVAL_MS / 1000 : null,
+      luckImpactBonus: fighter.id === "luck" ? 0 : null,
+      lifeSteal: fighter.id === "luck" ? false : null,
       meltdownState: "Stable",
       meltdownRole: null,
       meltdownText: ""
@@ -866,6 +925,8 @@ function Battle({ fighters: selected, modifiers, settings, mode, recordGames, on
         defrostTime: 0,
         teslaCoils: fighter.id === "electric" ? 0 : null,
         lightningState: fighter.id === "electric" ? "Idle" : null,
+        nextRockslide: fighter.id === "earth" ? ROCKSLIDE_COOLDOWN_MS / 1000 : null,
+        activeRocks: fighter.id === "earth" ? 0 : null,
         moonMode: fighter.id === "gravity" ? "Orbiting" : null,
         moonStates: fighter.id === "gravity" ? ["Orbiting", "Orbiting"] : null,
         nextSwing: fighter.id === "baseball" ? baseballCooldown / 1000 : null,
@@ -876,6 +937,11 @@ function Battle({ fighters: selected, modifiers, settings, mode, recordGames, on
         genesisObjects: fighter.id === "digital" ? 0 : null,
         spookyState: fighter.id === "fear" ? "Normal" : null,
         nextSpooky: fighter.id === "fear" ? 5 : null,
+        luckSlots: fighter.id === "luck" ? ["x", "x", "x"] : null,
+        luckState: fighter.id === "luck" ? "Waiting" : null,
+        nextLuckRoll: fighter.id === "luck" ? LUCK_SPIN_INTERVAL_MS / 1000 : null,
+        luckImpactBonus: fighter.id === "luck" ? 0 : null,
+        lifeSteal: fighter.id === "luck" ? false : null,
         meltdownState: "Stable",
         meltdownRole: null,
         meltdownText: ""
@@ -885,10 +951,14 @@ function Battle({ fighters: selected, modifiers, settings, mode, recordGames, on
       nextIcicleAt: selected.map((fighter) => (fighter.id === "ice" ? now + 2000 : Infinity)),
       nextBaseballSwingAt: selected.map((fighter) => (fighter.id === "baseball" ? now + baseballCooldown : Infinity)),
       nextGenesisAt: selected.map((fighter) => (fighter.id === "digital" ? now + GENESIS_COOLDOWN_MS : Infinity)),
+      nextRockslideAt: selected.map((fighter) => (fighter.id === "earth" ? now + ROCKSLIDE_COOLDOWN_MS : Infinity)),
       nextSpookyAt: selected.map((fighter) => (fighter.id === "fear" ? now + 5000 : Infinity)),
+      nextLuckSpinAt: selected.map((fighter) => (fighter.id === "luck" ? now + LUCK_SPIN_INTERVAL_MS : Infinity)),
       blueModeArrows: [],
       elementalExplosions: [],
       genesisObjects: [],
+      luckBottleQueue: [],
+      rocks: [],
       teslaCoils: [],
       lightningBolts: [],
       lightningQueue: [],
@@ -951,6 +1021,9 @@ function Battle({ fighters: selected, modifiers, settings, mode, recordGames, on
         meltdown: null,
         spookyState: fighter.id === "fear" ? "normal" : null,
         lastSpookyPauseAt: 0,
+        luckSpin: null,
+        luckImpactBonus: 0,
+        lifeSteal: false,
         overloadState: "building",
         overloadChargeAt: 0,
         overloadDashStartedAt: 0,
@@ -1002,6 +1075,19 @@ function Battle({ fighters: selected, modifiers, settings, mode, recordGames, on
       ball.baseballChargeAudio = null;
       ball.baseballSwingAudio = null;
       ball.baseballFrenzyAudio = null;
+    };
+    const cancelBaseballSwing = (ball, time, nextDelay = baseballCooldown) => {
+      if (ball.fighter.id !== "baseball") return;
+      if (ball.swing && !ball.swing.swung && Math.hypot(ball.vx, ball.vy) < 0.001) {
+        setVelocity(ball, ball.swing.resumeAngle, normalSpeed);
+      }
+      stopBaseballSfx(ball);
+      ball.swing = null;
+      game.nextBaseballSwingAt[ball.side] = time + nextDelay;
+      if (game.effects[ball.side]?.swingState !== null) {
+        game.effects[ball.side].swingState = "Waiting";
+        game.effects[ball.side].nextSwing = Math.max(0, nextDelay / 1000);
+      }
     };
     const isBaseballFrenzy = (ball) => ball.fighter.id === "baseball" && Boolean(ball.swing?.frenzy || ball.swing?.frenzyQueued);
     const isDigitalMeltdown = (ball) => ball.fighter.id === "digital" && Boolean(ball.meltdown);
@@ -1089,6 +1175,7 @@ function Battle({ fighters: selected, modifiers, settings, mode, recordGames, on
     const markPower = (ball, time) => {
       if (modifiers.pillowMode || isBaseballFrenzy(ball)) return;
       const angle = Math.atan2(ball.vy, ball.vx);
+      cancelBaseballSwing(ball, time);
       ball.powered = true;
       ball.poweredUntil = time + 3000;
       ball.trapSpitUntil = 0;
@@ -1097,9 +1184,11 @@ function Battle({ fighters: selected, modifiers, settings, mode, recordGames, on
     const markPowerAtAngle = (ball, time, angle) => {
       if (isBaseballFrenzy(ball)) return;
       if (modifiers.pillowMode) {
+        cancelBaseballSwing(ball, time);
         setVelocity(ball, angle, normalSpeed);
         return;
       }
+      cancelBaseballSwing(ball, time);
       ball.powered = true;
       ball.poweredUntil = time + 3000;
       ball.trapSpitUntil = 0;
@@ -1115,6 +1204,46 @@ function Battle({ fighters: selected, modifiers, settings, mode, recordGames, on
     const trapReleaseAngle = (trap) => {
       const offset = 0.3 + Math.random() * 0.35;
       return trap.angle + (Math.random() < 0.5 ? -offset : offset);
+    };
+    const findTrapAnchor = (id) => (
+      game.traps.find((trap) => trap.id === id)
+      || game.genesisObjects.find((object) => object.id === id && object.finalType === "flytrap" && object.closed)
+    );
+    const releaseFlytrapVictim = (trap, victim, time) => {
+      victim.trappedBy = null;
+      const releaseAngle = trapReleaseAngle(trap);
+      if (trap.powerRelease) {
+        markPowerAtAngle(victim, time, releaseAngle);
+      } else {
+        victim.powered = false;
+        victim.poweredUntil = 0;
+        setVelocity(victim, releaseAngle, trapSpitSpeed);
+        victim.trapPowerWindowUntil = time + 1000;
+        victim.trapSpitUntil = time + 1000;
+      }
+      trap.closedAt = time;
+      trap.victimSide = null;
+    };
+    const closeFlytrapOnVictim = (trap, enemy, time) => {
+      if (isBaseballFrenzy(enemy)) return false;
+      trap.closed = true;
+      playSfx(flytrapChompSfx);
+      if (game.effects[trap.side].lifeChomps !== null) {
+        game.effects[trap.side].lifeChomps += 1;
+        game.effects[trap.side].maxGrowths = getLifeMax(game.effects[trap.side].lifeChomps);
+      }
+      trap.victimSide = enemy.side;
+      trap.powerRelease = enemy.trapPowerWindowUntil >= time;
+      trap.releaseAt = time + 240;
+      enemy.trappedBy = trap.id;
+      enemy.trapPowerWindowUntil = 0;
+      enemy.trapSpitUntil = 0;
+      enemy.x = trap.x;
+      enemy.y = trap.y;
+      enemy.vx = 0;
+      enemy.vy = 0;
+      pushDamage(enemy.side, 5, enemy.x, enemy.y);
+      return true;
     };
     const getBaseballBatAngle = (ball) => {
       const target = balls[ball.side ? 0 : 1];
@@ -1252,6 +1381,9 @@ function Battle({ fighters: selected, modifiers, settings, mode, recordGames, on
       game.genesisObjects
         .filter((object) => object.side === side)
         .forEach((object) => addExplosion(object.x, object.y, "#22d3ee", 0.9));
+      game.rocks
+        .filter((rock) => rock.side === side)
+        .forEach((rock) => addExplosion(rock.x, rock.y, "#8b5e34", Math.max(0.45, rock.r / 24)));
       game.lightningBolts
         .filter((bolt) => bolt.side === side)
         .forEach((bolt) => addExplosion((bolt.a.x + bolt.b.x) / 2, (bolt.a.y + bolt.b.y) / 2, "#facc15", 1));
@@ -1270,6 +1402,7 @@ function Battle({ fighters: selected, modifiers, settings, mode, recordGames, on
       game.traps = game.traps.filter((trap) => trap.side !== side);
       game.teslaCoils = game.teslaCoils.filter((coil) => coil.side !== side);
       game.genesisObjects = game.genesisObjects.filter((object) => object.side !== side);
+      game.rocks = game.rocks.filter((rock) => rock.side !== side);
       game.lightningBolts = game.lightningBolts.filter((bolt) => bolt.side !== side);
       game.lightningQueue = game.lightningQueue.filter((pair) => pair.side !== side);
       game.blueModeArrows = game.blueModeArrows.filter((arrow) => arrow.side !== side);
@@ -1371,6 +1504,21 @@ function Battle({ fighters: selected, modifiers, settings, mode, recordGames, on
       ball.overloadBonus += lostHp;
       effect.overloadBonus = ball.overloadBonus;
     };
+    const healBall = (side, amount, x = balls[side].x, y = balls[side].y) => {
+      if (amount <= 0 || game.hp[side] <= 0 || game.defeatedSide !== null) return;
+      const previousHp = game.hp[side];
+      game.hp[side] = Math.min(maxHp[side], game.hp[side] + amount);
+      const gainedHp = game.hp[side] - previousHp;
+      if (gainedHp <= 0) return;
+      game.floating.push({ id: `${performance.now()}-heal-${side}`, side, x, y, text: `+${gainedHp}` });
+      game.floating = game.floating.slice(-8);
+    };
+    const applyLifeSteal = (attackerSide, amount, x, y) => {
+      if (attackerSide === null || attackerSide === undefined || amount <= 0) return;
+      const attacker = balls[attackerSide];
+      if (!attacker?.lifeSteal || game.hp[attackerSide] <= 0) return;
+      healBall(attackerSide, amount, x, y - 18);
+    };
     const pushDamage = (side, amount, x, y, options = {}) => {
       if (game.defeatedSide !== null || game.hp[side] <= 0) return;
       if (isFearPlasma(balls[side])) return;
@@ -1387,6 +1535,7 @@ function Battle({ fighters: selected, modifiers, settings, mode, recordGames, on
           game.floating.push({ id: `${performance.now()}-${side}`, side, x, y, text: `-${lostHp}` });
           game.floating = game.floating.slice(-8);
           addFireOverloadDamage(balls[side], lostHp, performance.now());
+          if (options.direct) applyLifeSteal(options.attackerSide, lostHp, x, y);
         }
         startDigitalMeltdown(balls[side], performance.now());
         return;
@@ -1398,6 +1547,7 @@ function Battle({ fighters: selected, modifiers, settings, mode, recordGames, on
       game.floating.push({ id: `${performance.now()}-${side}`, side, x, y, text: `-${amount}` });
       game.floating = game.floating.slice(-8);
       addFireOverloadDamage(balls[side], lostHp, performance.now());
+      if (options.direct) applyLifeSteal(options.attackerSide, lostHp, x, y);
       if (game.hp[side] <= 0) defeatSide(side, performance.now());
     };
     const distanceToSegment = (px, py, ax, ay, bx, by) => {
@@ -1442,6 +1592,141 @@ function Battle({ fighters: selected, modifiers, settings, mode, recordGames, on
         inLiquid: false
       });
       game.nextIcicleAt[ball.side] = time + 2000;
+    };
+    const randomLuckSlots = () => Array.from({ length: 3 }, () => LUCK_SLOTS[Math.floor(Math.random() * LUCK_SLOTS.length)]);
+    const getLuckSlotCount = (slots, symbol) => slots.filter((slot) => slot === symbol).length;
+    const swapBallPositions = () => {
+      const first = balls[0];
+      const second = balls[1];
+      const firstPosition = { x: first.x, y: first.y, vx: first.vx, vy: first.vy, baseVx: first.baseVx, baseVy: first.baseVy };
+      first.x = second.x;
+      first.y = second.y;
+      first.vx = second.vx;
+      first.vy = second.vy;
+      first.baseVx = second.baseVx;
+      first.baseVy = second.baseVy;
+      second.x = firstPosition.x;
+      second.y = firstPosition.y;
+      second.vx = firstPosition.vx;
+      second.vy = firstPosition.vy;
+      second.baseVx = firstPosition.baseVx;
+      second.baseVy = firstPosition.baseVy;
+      balls.forEach(keepInBox);
+    };
+    const swapBallHealth = () => {
+      const firstHp = game.hp[0];
+      game.hp[0] = Math.min(maxHp[0], game.hp[1]);
+      game.hp[1] = Math.min(maxHp[1], firstHp);
+    };
+    const shootLuckBottle = (ball, time) => {
+      if (game.defeatedSide !== null || game.hp[ball.side] <= 0) return;
+      const target = balls[ball.side ? 0 : 1];
+      if (game.hp[target.side] <= 0) return;
+      const bottleSpeed = 8.6;
+      const angle = aimAtMovingTarget(ball, target, bottleSpeed, 1, time);
+      game.projectiles.push({
+        type: "bottle",
+        side: ball.side,
+        target: target.side,
+        x: ball.x,
+        y: ball.y,
+        vx: Math.cos(angle) * bottleSpeed,
+        vy: Math.sin(angle) * bottleSpeed,
+        baseVx: Math.cos(angle) * bottleSpeed,
+        baseVy: Math.sin(angle) * bottleSpeed,
+        inLiquid: false
+      });
+    };
+    const queueLuckBottles = (ball, count, time) => {
+      for (let index = 0; index < count; index += 1) {
+        game.luckBottleQueue.push({ side: ball.side, throwAt: time + index * 280 });
+      }
+    };
+    const resolveLuckSlots = (ball, slots, time) => {
+      const effect = game.effects[ball.side];
+      const gloveCount = getLuckSlotCount(slots, "glove");
+      const bottleCount = getLuckSlotCount(slots, "bottle");
+      const arrowsCount = getLuckSlotCount(slots, "arrows");
+      const xCount = getLuckSlotCount(slots, "x");
+      let earned = false;
+      if (slots.every((slot) => slot !== "x")) {
+        ball.lifeSteal = true;
+        effect.lifeSteal = true;
+        earned = true;
+      }
+      if (gloveCount >= 3) {
+        ball.luckImpactBonus += 2;
+        earned = true;
+      } else if (gloveCount >= 2) {
+        ball.luckImpactBonus += 1;
+        earned = true;
+      }
+      if (bottleCount >= 2) {
+        const drinks = bottleCount >= 3 ? 3 : 1;
+        for (let index = 0; index < drinks; index += 1) healBall(ball.side, 3, ball.x, ball.y - 18);
+        queueLuckBottles(ball, drinks, time);
+        earned = true;
+      }
+      if (arrowsCount >= 2) {
+        swapBallPositions();
+        if (arrowsCount >= 3) swapBallHealth();
+        earned = true;
+      }
+      if (xCount >= 3) {
+        playSfx(luckXSfx, 0.8);
+        pushDamage(ball.side, 5, ball.x, ball.y);
+      } else if (xCount >= 2) {
+        playSfx(luckXSfx, 0.8);
+        pushDamage(ball.side, 3, ball.x, ball.y);
+      } else if (earned) {
+        playSfx(luckEarnSfx, 0.85);
+      } else {
+        playSfx(luckNothingSfx, 0.75, { maxDurationMs: LUCK_NOTHING_SFX_MS });
+      }
+      effect.luckImpactBonus = ball.luckImpactBonus;
+    };
+    const updateLuckRoll = (ball, time, paused, dt) => {
+      const effect = game.effects[ball.side];
+      if (paused) {
+        game.nextLuckSpinAt[ball.side] += dt;
+        if (ball.luckSpin) {
+          ball.luckSpin.startedAt += dt;
+          ball.luckSpin.resolveAt += dt;
+        }
+        effect.nextLuckRoll = Math.max(0, ((ball.luckSpin?.resolveAt ?? game.nextLuckSpinAt[ball.side]) - time) / 1000);
+        effect.luckState = "Paused";
+        return;
+      }
+      if (!ball.luckSpin && time >= game.nextLuckSpinAt[ball.side]) {
+        ball.luckSpin = { startedAt: time, resolveAt: time + LUCK_SPIN_DURATION_MS };
+        effect.luckState = "Spinning";
+        playSfx(luckGambleSfx, 0.8, { maxDurationMs: LUCK_SPIN_DURATION_MS });
+      }
+      if (ball.luckSpin) {
+        const flickerSlots = randomLuckSlots();
+        effect.luckSlots = flickerSlots;
+        effect.nextLuckRoll = Math.max(0, (ball.luckSpin.resolveAt - time) / 1000);
+        effect.luckState = "Spinning";
+        if (time >= ball.luckSpin.resolveAt) {
+          const slots = randomLuckSlots();
+          effect.luckSlots = slots;
+          effect.luckState = "Landed";
+          resolveLuckSlots(ball, slots, time);
+          ball.luckSpin = null;
+          game.nextLuckSpinAt[ball.side] = time + LUCK_SPIN_INTERVAL_MS;
+          effect.nextLuckRoll = LUCK_SPIN_INTERVAL_MS / 1000;
+        }
+      } else {
+        effect.nextLuckRoll = Math.max(0, (game.nextLuckSpinAt[ball.side] - time) / 1000);
+        effect.luckState = "Waiting";
+      }
+    };
+    const updateLuckBottleQueue = (time) => {
+      game.luckBottleQueue = game.luckBottleQueue.filter((queuedBottle) => {
+        if (time < queuedBottle.throwAt) return true;
+        shootLuckBottle(balls[queuedBottle.side], time);
+        return false;
+      });
     };
     const shuffle = (items) => {
       const shuffled = [...items];
@@ -1714,16 +1999,110 @@ function Battle({ fighters: selected, modifiers, settings, mode, recordGames, on
     };
     const stunBall = (ball, time) => {
       if (isBaseballFrenzy(ball)) return;
+      cancelBaseballSwing(ball, time);
       ball.powered = false;
       ball.poweredUntil = 0;
       ball.slam = null;
-      ball.swing = null;
-      stopBaseballSfx(ball);
       ball.trappedBy = null;
       ball.trapSpitUntil = 0;
       ball.vx = 0;
       ball.vy = 0;
       ball.stunnedUntil = time + 3000;
+    };
+    const spawnRockslide = (ball, time) => {
+      if (game.defeatedSide !== null || game.hp[ball.side] <= 0) return;
+      const rockCount = 12 + Math.floor(Math.random() * 7);
+      for (let index = 0; index < rockCount; index += 1) {
+        const sizeRoll = Math.random();
+        const r = sizeRoll < 0.18 ? ball.r * 0.36 : sizeRoll < 0.55 ? ball.r * 0.27 : ball.r * 0.19;
+        game.rocks.push({
+          id: `${time}-${ball.side}-${game.rocks.length}-${index}`,
+          side: ball.side,
+          target: ball.side ? 0 : 1,
+          x: r + Math.random() * (box.w - r * 2),
+          y: -r - index * 10 - Math.random() * box.h * 0.35,
+          vx: (Math.random() - 0.5) * normalSpeed * 0.28,
+          vy: normalSpeed * (0.54 + Math.random() * 0.36),
+          r,
+          mass: r * r,
+          angle: Math.random() * Math.PI * 2,
+          spin: (Math.random() - 0.5) * 0.08,
+          bornAt: time,
+          hit: false
+        });
+      }
+      game.nextRockslideAt[ball.side] = time + ROCKSLIDE_COOLDOWN_MS;
+    };
+    const applyRockHit = (rock, target, time) => {
+      if (rock.hit || game.hp[target.side] <= 0 || isFearPlasma(target) || isBaseballFrenzy(target)) return;
+      if (Math.hypot(rock.x - target.x, rock.y - target.y) >= rock.r + target.r) return;
+      rock.hit = true;
+      pushDamage(target.side, 2, target.x, target.y, { sfx: hitSfx, volumeScale: 0.45 });
+    };
+    const updateRockslide = (ball, time, paused, dt) => {
+      const effect = game.effects[ball.side];
+      if (paused) {
+        game.nextRockslideAt[ball.side] += dt;
+        effect.nextRockslide = Math.max(0, (game.nextRockslideAt[ball.side] - time) / 1000);
+        effect.activeRocks = game.rocks.filter((rock) => rock.side === ball.side).length;
+        return;
+      }
+      effect.nextRockslide = Math.max(0, (game.nextRockslideAt[ball.side] - time) / 1000);
+      effect.activeRocks = game.rocks.filter((rock) => rock.side === ball.side).length;
+      if (time >= game.nextRockslideAt[ball.side]) spawnRockslide(ball, time);
+    };
+    const updateRocks = (time) => {
+      const gravity = 0.15 * modifiers.speed;
+      game.rocks.forEach((rock) => {
+        rock.vy += gravity;
+        rock.x += rock.vx;
+        rock.y += rock.vy;
+        rock.angle += rock.spin;
+        if (rock.x < rock.r || rock.x > box.w - rock.r) {
+          rock.x = Math.max(rock.r, Math.min(box.w - rock.r, rock.x));
+          rock.vx *= -0.74;
+        }
+        if (rock.y > box.h - rock.r) {
+          rock.y = box.h - rock.r;
+          rock.vy *= -0.52;
+          rock.vx *= 0.92;
+        }
+        if (rock.y < -box.h * 0.35) return;
+        const target = balls[rock.target];
+        applyRockHit(rock, target, time);
+      });
+      for (let firstIndex = 0; firstIndex < game.rocks.length; firstIndex += 1) {
+        const first = game.rocks[firstIndex];
+        for (let secondIndex = firstIndex + 1; secondIndex < game.rocks.length; secondIndex += 1) {
+          const second = game.rocks[secondIndex];
+          const dx = second.x - first.x;
+          const dy = second.y - first.y;
+          const dist = Math.hypot(dx, dy) || 1;
+          const minDist = first.r + second.r;
+          if (dist >= minDist) continue;
+          const nx = dx / dist;
+          const ny = dy / dist;
+          const overlap = minDist - dist;
+          const totalMass = first.mass + second.mass;
+          first.x -= nx * overlap * (second.mass / totalMass);
+          first.y -= ny * overlap * (second.mass / totalMass);
+          second.x += nx * overlap * (first.mass / totalMass);
+          second.y += ny * overlap * (first.mass / totalMass);
+          const relVx = second.vx - first.vx;
+          const relVy = second.vy - first.vy;
+          const impactSpeed = relVx * nx + relVy * ny;
+          if (impactSpeed > 0) continue;
+          const impulse = (-(1 + 0.58) * impactSpeed) / (1 / first.mass + 1 / second.mass);
+          first.vx -= (impulse * nx) / first.mass;
+          first.vy -= (impulse * ny) / first.mass;
+          second.vx += (impulse * nx) / second.mass;
+          second.vy += (impulse * ny) / second.mass;
+        }
+      }
+      game.rocks = game.rocks.filter((rock) => !rock.hit && time - rock.bornAt < 7600 && rock.y < box.h + rock.r * 3);
+      game.effects.forEach((effect, index) => {
+        if (effect.activeRocks !== null) effect.activeRocks = game.rocks.filter((rock) => rock.side === index).length;
+      });
     };
     const finishBaseballSwing = (ball, time) => {
       if (!ball.swing || ball.swing.swung) return;
@@ -1746,7 +2125,7 @@ function Battle({ fighters: selected, modifiers, settings, mode, recordGames, on
         reflectedObjects += 1;
       });
       game.projectiles.forEach((projectile) => {
-        if (!["icicle", "syringe"].includes(projectile.type)) return;
+        if (!["bottle", "icicle", "syringe"].includes(projectile.type)) return;
         if (projectile.side === ball.side || !isObjectInBatArc(ball, { ...projectile, r: 10 }, swingAngle, swingRange)) return;
         reflectProjectileTowardOwner(projectile, ball, time);
         reflectedObjects += 1;
@@ -1949,25 +2328,18 @@ function Battle({ fighters: selected, modifiers, settings, mode, recordGames, on
     const collideGenesisObjectWithBall = (object, ball, time) => {
       if (object.phase === "settled" && object.finalType === "tesla") return;
       if (object.phase === "sliding") return;
+      if (object.finalType === "flytrap" && object.closed) return;
       if (game.hp[ball.side] <= 0 || ball.trappedBy || isDigitalMeltdown(ball) || isFearPlasma(ball)) return;
       if (ball.side === object.side) return;
       const dx = ball.x - object.x;
       const dy = ball.y - object.y;
       const dist = Math.hypot(dx, dy) || 1;
-      if (dist >= ball.r + object.r) return;
-      const nx = dx / dist;
-      const ny = dy / dist;
-      const overlap = ball.r + object.r - dist;
-      ball.x += nx * overlap;
-      ball.y += ny * overlap;
-      keepInBox(ball);
+      const hitboxRadius = object.finalType === "flytrap" ? 12 * 1.1 : object.r;
+      if (dist >= ball.r + hitboxRadius) return;
       if (time - object.lastHitAt < 650) return;
       object.lastHitAt = time;
       if (object.finalType === "flytrap") {
-        playSfx(flytrapChompSfx);
-        pushDamage(ball.side, 5, ball.x, ball.y);
-        if (game.hp[ball.side] > 0) setVelocity(ball, trapReleaseAngle(object), trapSpitSpeed);
-        object.remove = true;
+        closeFlytrapOnVictim(object, ball, time);
       }
       if (object.finalType === "box") {
         pushDamage(ball.side, 3, ball.x, ball.y, { sfx: powerHitSfx, volumeScale: 0.65 });
@@ -1991,10 +2363,19 @@ function Battle({ fighters: selected, modifiers, settings, mode, recordGames, on
             object.vy *= -0.72;
           }
           if (time >= object.slideUntil) settleGenesisObject(object, time);
+        } else if (object.finalType === "flytrap" && object.closed) {
+          if (object.victimSide !== null) {
+            const victim = balls[object.victimSide];
+            victim.x = object.x;
+            victim.y = object.y;
+            victim.vx = 0;
+            victim.vy = 0;
+            if (time >= object.releaseAt) releaseFlytrapVictim(object, victim, time);
+          }
         }
         balls.forEach((ball) => collideGenesisObjectWithBall(object, ball, time));
       });
-      game.genesisObjects = game.genesisObjects.filter((object) => !object.remove);
+      game.genesisObjects = game.genesisObjects.filter((object) => !object.remove && (!object.closedAt || time - object.closedAt < 420));
       game.effects.forEach((effect, index) => {
         if (effect.genesisObjects !== null) effect.genesisObjects = game.genesisObjects.filter((object) => object.side === index).length;
       });
@@ -2312,11 +2693,50 @@ function Battle({ fighters: selected, modifiers, settings, mode, recordGames, on
       ctx.stroke();
       ctx.restore();
     };
+    const drawRock = (rock) => {
+      ctx.save();
+      ctx.translate(rock.x, rock.y);
+      ctx.rotate(rock.angle);
+      ctx.fillStyle = "#8b5e34";
+      ctx.strokeStyle = "#2f2418";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      const points = 7;
+      for (let index = 0; index < points; index += 1) {
+        const angle = (index / points) * Math.PI * 2;
+        const radius = rock.r * (0.78 + ((index * 37 + Math.floor(rock.r)) % 23) / 100);
+        const x = Math.cos(angle) * radius;
+        const y = Math.sin(angle) * radius;
+        if (index === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "rgba(255, 255, 255, 0.22)";
+      ctx.beginPath();
+      ctx.arc(-rock.r * 0.25, -rock.r * 0.28, rock.r * 0.18, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    };
     const drawProjectile = (projectile) => {
       ctx.save();
       ctx.translate(projectile.x, projectile.y);
       ctx.rotate(Math.atan2(projectile.vy, projectile.vx) + Math.PI / 2);
-      if (projectile.type === "icicle") {
+      if (projectile.type === "bottle") {
+        ctx.fillStyle = "#7dd3fc";
+        ctx.strokeStyle = "#0f172a";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(-6, -16, 12, 25, 4);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = "#38bdf8";
+        ctx.fillRect(-4, -8, 8, 14);
+        ctx.strokeRect(-4, -8, 8, 14);
+        ctx.fillStyle = "#0f172a";
+        ctx.fillRect(-3, -20, 6, 6);
+      } else if (projectile.type === "icicle") {
         ctx.rotate(Math.PI);
         if (icicleImage.complete && icicleImage.naturalWidth) {
           const height = 42;
@@ -2409,14 +2829,16 @@ function Battle({ fighters: selected, modifiers, settings, mode, recordGames, on
         ctx.stroke();
       } else if (object.finalType === "flytrap") {
         const size = object.r * 5.2;
-        const image = trapImages[0];
+        const attackIndex = object.closed ? Math.min(3, Math.max(1, Math.floor(((object.releaseAt - time) / 240) * -3) + 3)) : 0;
+        const image = trapImages[attackIndex];
         if (image?.complete && image.naturalWidth) {
           ctx.drawImage(image, -size / 2, -size / 2, size, size);
         } else {
-          ctx.fillStyle = "#31b65b";
+          ctx.fillStyle = object.closed ? "#247d3b" : "#31b65b";
+          const snap = object.closed ? 0.55 : 1;
           ctx.beginPath();
-          ctx.ellipse(-object.r * 0.8, 0, object.r * 1.5, object.r * 0.75, 0, 0, Math.PI * 2);
-          ctx.ellipse(object.r * 0.8, 0, object.r * 1.5, object.r * 0.75, 0, 0, Math.PI * 2);
+          ctx.ellipse(-object.r * 0.8, 0, object.r * 1.5, object.r * 0.75 * snap, 0, 0, Math.PI * 2);
+          ctx.ellipse(object.r * 0.8, 0, object.r * 1.5, object.r * 0.75 * snap, 0, 0, Math.PI * 2);
           ctx.fill();
           ctx.stroke();
         }
@@ -2613,7 +3035,7 @@ function Battle({ fighters: selected, modifiers, settings, mode, recordGames, on
             ball.inLiquid = false;
           }
           if (ball.trappedBy) {
-            const trap = game.traps.find((candidate) => candidate.id === ball.trappedBy);
+            const trap = findTrapAnchor(ball.trappedBy);
             if (trap) {
               ball.x = trap.x;
               ball.y = trap.y;
@@ -2801,9 +3223,15 @@ function Battle({ fighters: selected, modifiers, settings, mode, recordGames, on
           } else if (time - game.lastCollisionAt > 260) {
             bounceBalls(balls[0], balls[1], time);
             if (!pausedContact) {
-              const hitDamage = Math.max(1, Math.round(modifiers.damage));
-              pushDamage(0, hitDamage, balls[0].x, balls[0].y);
-              pushDamage(1, hitDamage, balls[1].x, balls[1].y);
+              const getImpactDamage = (attacker) => {
+                const baseDamage = attacker.fighter.damage + (attacker.luckImpactBonus || 0);
+                if (baseDamage <= 0) return 0;
+                return Math.max(1, Math.round(baseDamage * modifiers.damage));
+              };
+              const damageToOne = getImpactDamage(balls[0]);
+              const damageToZero = getImpactDamage(balls[1]);
+              if (damageToZero > 0) pushDamage(0, damageToZero, balls[0].x, balls[0].y, { direct: true, attackerSide: 1 });
+              if (damageToOne > 0) pushDamage(1, damageToOne, balls[1].x, balls[1].y, { direct: true, attackerSide: 0 });
             }
             game.lastCollisionAt = time;
           }
@@ -2874,6 +3302,9 @@ function Battle({ fighters: selected, modifiers, settings, mode, recordGames, on
             game.effects[index].teslaCoils = coilCount;
             game.effects[index].lightningState = game.lightningBolts.some((bolt) => bolt.side === index) ? "Zapping" : coilCount >= 2 ? "Charging" : "Idle";
           }
+          if (fighter.id === "earth" && game.hp[index] > 0 && game.defeatedSide === null) {
+            updateRockslide(ball, time, paused, dt);
+          }
           if (fighter.id === "digital" && game.hp[index] > 0) {
             if (ball.meltdown) {
               game.effects[index].nextGenesis = 0;
@@ -2894,6 +3325,9 @@ function Battle({ fighters: selected, modifiers, settings, mode, recordGames, on
           }
           if (fighter.id === "fear" && game.hp[index] > 0 && game.defeatedSide === null) {
             updateFearSpooky(ball, time, paused);
+          }
+          if (fighter.id === "luck" && game.hp[index] > 0 && game.defeatedSide === null) {
+            updateLuckRoll(ball, time, paused, dt);
           }
           if (fighter.id === "gravity" && game.hp[index] > 0 && game.defeatedSide === null) {
             updateGravityMoons(ball, time);
@@ -2962,6 +3396,8 @@ function Battle({ fighters: selected, modifiers, settings, mode, recordGames, on
 
         updateLightning(time);
         updateGenesisObjects(time);
+        updateLuckBottleQueue(time);
+        updateRocks(time);
 
         game.projectiles = game.projectiles.filter((projectile) => {
           const owner = balls[projectile.side];
@@ -3013,7 +3449,10 @@ function Battle({ fighters: selected, modifiers, settings, mode, recordGames, on
           }
           if (Math.hypot(projectile.x - target.x, projectile.y - target.y) < target.r + 8) {
             if (isBaseballFrenzy(target)) return false;
-            if (projectile.type === "icicle") {
+            if (projectile.type === "bottle") {
+              pushDamage(projectile.target, 3, target.x, target.y, { direct: true, attackerSide: projectile.side });
+              if (game.hp[target.side] > 0) stunBall(target, time);
+            } else if (projectile.type === "icicle") {
               pushDamage(projectile.target, 3, target.x, target.y);
               if (game.effects[projectile.side].iciclesLanded !== null) {
                 game.effects[projectile.side].iciclesLanded += 1;
@@ -3057,45 +3496,14 @@ function Battle({ fighters: selected, modifiers, settings, mode, recordGames, on
               victim.y = trap.y;
               victim.vx = 0;
               victim.vy = 0;
-              if (time >= trap.releaseAt) {
-                victim.trappedBy = null;
-                const releaseAngle = trapReleaseAngle(trap);
-                if (trap.powerRelease) {
-                  markPowerAtAngle(victim, time, releaseAngle);
-                } else {
-                  victim.powered = false;
-                  victim.poweredUntil = 0;
-                  setVelocity(victim, releaseAngle, trapSpitSpeed);
-                  victim.trapPowerWindowUntil = time + 1000;
-                  victim.trapSpitUntil = time + 1000;
-                }
-                trap.closedAt = time;
-                trap.victimSide = null;
-              }
+              if (time >= trap.releaseAt) releaseFlytrapVictim(trap, victim, time);
             }
             return;
           }
           const enemy = balls[trap.side ? 0 : 1];
           const centerHitboxRadius = 12 * 1.1;
           if (game.defeatedSide === null && game.hp[trap.side] > 0 && game.hp[enemy.side] > 0 && !isFearPlasma(enemy) && Math.hypot(trap.x - enemy.x, trap.y - enemy.y) < enemy.r + centerHitboxRadius) {
-            if (isBaseballFrenzy(enemy)) return;
-            trap.closed = true;
-            playSfx(flytrapChompSfx);
-            if (game.effects[trap.side].lifeChomps !== null) {
-              game.effects[trap.side].lifeChomps += 1;
-              game.effects[trap.side].maxGrowths = getLifeMax(game.effects[trap.side].lifeChomps);
-            }
-            trap.victimSide = enemy.side;
-            trap.powerRelease = enemy.trapPowerWindowUntil >= time;
-            trap.releaseAt = time + 240;
-            enemy.trappedBy = trap.id;
-            enemy.trapPowerWindowUntil = 0;
-            enemy.trapSpitUntil = 0;
-            enemy.x = trap.x;
-            enemy.y = trap.y;
-            enemy.vx = 0;
-            enemy.vy = 0;
-            pushDamage(enemy.side, 5, enemy.x, enemy.y);
+            closeFlytrapOnVictim(trap, enemy, time);
           }
         });
         game.traps = game.traps.filter((trap) => !trap.closedAt || time - trap.closedAt < 420);
@@ -3106,6 +3514,7 @@ function Battle({ fighters: selected, modifiers, settings, mode, recordGames, on
       }
 
       game.genesisObjects.forEach((object) => drawGenesisObject(object, time));
+      game.rocks.forEach(drawRock);
       game.projectiles.forEach(drawProjectile);
       game.explosions = game.explosions.filter((explosion) => time - explosion.bornAt < 560);
       game.explosions.forEach((explosion) => drawExplosion(explosion, time));
@@ -3211,6 +3620,10 @@ function EffectPanel({ fighter, effects, side, mode }) {
   if (fighter.id === "electric") {
     lines.push(`Tesla coils: ${effects.teslaCoils}`);
   }
+  if (fighter.id === "earth") {
+    lines.push(`Next Rockslide: ${effects.nextRockslide.toFixed(1)} sec`);
+    lines.push(`Rocks: ${effects.activeRocks}`);
+  }
   if (fighter.id === "digital") {
     lines.push(`Producing Object In: ${effects.nextGenesis.toFixed(1)} sec`);
     lines.push(`Models: ${effects.genesisObjects}`);
@@ -3218,6 +3631,12 @@ function EffectPanel({ fighter, effects, side, mode }) {
   if (fighter.id === "fear") {
     lines.push(`State: ${effects.spookyState}`);
     lines.push(`Next Spooky: ${effects.nextSpooky.toFixed(1)} sec`);
+  }
+  if (fighter.id === "luck") {
+    lines.push(`State: ${effects.luckState}`);
+    lines.push(`Next Roll: ${effects.nextLuckRoll.toFixed(1)} sec`);
+    lines.push(`Impact Bonus: +${effects.luckImpactBonus}`);
+    if (effects.lifeSteal) lines.push("Life Steal");
   }
   if (fighter.id === "air") {
     lines.push(`Next Blue Mode: ${effects.nextBlueMode.toFixed(1)} sec`);
@@ -3236,6 +3655,13 @@ function EffectPanel({ fighter, effects, side, mode }) {
     <div className="effect-panel">
       {mode !== "local" && <strong>{side}</strong>}
       <span>{abilityLabel}: {abilityText}</span>
+      {fighter.id === "luck" && (
+        <div className={`slot-machine ${effects.luckState === "Spinning" ? "is-spinning" : ""}`}>
+          {effects.luckSlots.map((slot, index) => (
+            <b key={`${slot}-${index}`}>{LUCK_SLOT_LABELS[slot]}</b>
+          ))}
+        </div>
+      )}
       {lines.map((line) => <small key={line}>{line}</small>)}
     </div>
   );

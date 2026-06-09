@@ -355,6 +355,22 @@ button {
   justify-content: center;
   gap: 14px;
   width: max-content;
+  max-height: min(484px, calc(100vh - 230px));
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 2px 4px 10px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  scroll-behavior: smooth;
+  outline: none;
+}
+
+.roster::-webkit-scrollbar {
+  display: none;
+}
+
+.roster:focus-visible {
+  filter: drop-shadow(0 0 0.45rem rgba(255, 255, 255, 0.78));
 }
 
 .logo-token,
@@ -676,6 +692,30 @@ canvas {
   color: #444;
 }
 
+.slot-machine {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  width: min(168px, 100%);
+  margin: 2px auto;
+}
+
+.slot-machine b {
+  display: grid;
+  place-items: center;
+  min-height: 24px;
+  border: 2px solid #111;
+  border-radius: 4px;
+  background: #fff6c7;
+  color: #111;
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.slot-machine.is-spinning b {
+  background: #d9f4ff;
+}
+
 .mode-chip {
   position: absolute;
   left: max(78px, 12vw);
@@ -864,6 +904,8 @@ canvas {
     order: initial;
     grid-template-columns: repeat(2, 72px);
     gap: 10px;
+    max-height: min(382px, calc(100vh - 220px));
+    padding-bottom: 8px;
   }
 
   .pedestal-wrap {
